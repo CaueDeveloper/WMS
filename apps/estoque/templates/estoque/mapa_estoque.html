@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+
+{% block title %}Mapa de Estoque — WMS{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <strong>Mapa de Estoque</strong>
+    <a href="{% url 'home' %}">Início</a>
+</div>
+<div class="container-amplo">
+    <h1>Visão Geral do Estoque</h1>
+
+    <div class="resumo-estoque">
+        <div class="stat">
+            <div class="rotulo">Paletes Armazenados</div>
+            <div class="valor">{{ total_paletes_armazenados }}</div>
+        </div>
+        <div class="stat">
+            <div class="rotulo">Ocupação da Malha</div>
+            <div class="valor">{{ ocupacao_total }} / {{ capacidade_total }}</div>
+        </div>
+        <div class="stat">
+            <div class="rotulo">% Ocupado</div>
+            <div class="valor">{{ percentual_geral }}%</div>
+        </div>
+    </div>
+
+    <h2>Mapa por Corredor × Andar</h2>
+    <div class="legenda">
+        <span><span class="amostra nivel-vazio"></span> Vazio</span>
+        <span><span class="amostra nivel-baixo"></span> &lt; 30%</span>
+        <span><span class="amostra nivel-medio"></span> 30–69%</span>
+        <span><span class="amostra nivel-alto"></span> 70–99%</span>
+        <span><span class="amostra nivel-cheio"></span> Cheio (100%)</span>
+    </div>
+
+    <div class="scroll-x">
+        <table class="mapa-estoque">
+            <thead>
+                <tr>
+                    <th>Corredor</th>
+                    {% for andar in andares %}<th>Andar {{ andar }}</th>{% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for linha in grade %}
+                <tr>
+                    <th>{{ linha.corredor|stringformat:"02d" }}</th>
+                    {% for celula in linha.celulas %}
+                        {% if celula %}
+                            <td class="cel-endereco nivel-{{ celula.nivel }}">
+                                {{ celula.endereco.codigo }}
+                                <small>{{ celula.endereco.ocupacao_atual }}/{{ celula.endereco.capacidade }}</small>
+                            </td>
+                        {% else %}
+                            <td class="cel-endereco nivel-vazio">—</td>
+                        {% endif %}
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <h2>Guardas — Paletes Armazenados</h2>
+    {% if not paletes_armazenados %}
+        <p>Nenhum palete armazenado no momento.</p>
+    {% else %}
+    <div class="scroll-x">
+        <table class="tabela-guardas">
+            <thead>
+                <tr>
+                    <th>Endereço</th>
+                    <th>Barcode</th>
+                    <th>SKU</th>
+                    <th>Descrição</th>
+                    <th>Lote</th>
+                    <th>Peso (kg)</th>
+                    <th>Área de Origem</th>
+                    <th>Armazenado em</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in paletes_armazenados %}
+                <tr>
+                    <td>{{ p.endereco.codigo }}</td>
+                    <td>{{ p.barcode_palete }}</td>
+                    <td>{{ p.sku }}</td>
+                    <td>{{ p.descricao }}</td>
+                    <td>{{ p.lote }}</td>
+                    <td>{{ p.peso_kg }}</td>
+                    <td>{{ p.area_destino.nome|default:"—" }}</td>
+                    <td>{{ p.atualizado_em|date:"d/m/Y H:i" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

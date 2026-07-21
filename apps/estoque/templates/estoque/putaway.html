@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+
+{% block title %}Armazenagem — WMS{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <strong>Armazenagem (Put-away)</strong>
+    <a href="{% url 'home' %}">Início</a>
+</div>
+<div class="container">
+    <h1>Paletes Aprovados — Aguardando Guarda</h1>
+
+    {% for mensagem in messages %}
+        <p class="{% if mensagem.tags == 'error' %}erro{% else %}ok{% endif %}">{{ mensagem }}</p>
+    {% endfor %}
+
+    {% if not pendentes %}
+        <p>Nenhum palete aprovado aguardando guarda.</p>
+    {% endif %}
+
+    {% for p in pendentes %}
+        <div class="cartao">
+            <p><strong>{{ p.barcode_palete }}</strong></p>
+            <p>SKU: {{ p.sku }} — Lote: {{ p.lote }}</p>
+            <p>{{ p.descricao }}</p>
+            <p>Peso: {{ p.peso_kg }} kg — Destino: {{ p.area_destino.nome|default:"—" }}</p>
+
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="palete_id" value="{{ p.pk }}">
+                <label for="endereco-{{ p.pk }}">Endereço</label>
+                <select name="codigo_endereco" id="endereco-{{ p.pk }}" required>
+                    {% for endereco in enderecos %}
+                        <option value="{{ endereco.codigo }}">{{ endereco.codigo }} ({{ endereco.ocupacao_atual }}/{{ endereco.capacidade }})</option>
+                    {% endfor %}
+                </select>
+                <button type="submit">Confirmar Guarda</button>
+            </form>
+        </div>
+    {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+
+{% block title %}Conferência do Gestor{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <strong>Conferência do Gestor</strong>
+    <a href="{% url 'home' %}">Início</a>
+</div>
+<div class="container">
+    <h1>Paletes Aguardando Conferência</h1>
+
+    {% for mensagem in messages %}
+        <p class="{% if mensagem.tags == 'error' %}erro{% else %}ok{% endif %}">{{ mensagem }}</p>
+    {% endfor %}
+
+    {% if not pendentes %}
+        <p>Nenhum palete aguardando conferência.</p>
+    {% endif %}
+
+    {% for p in pendentes %}
+        <div class="cartao">
+            <p><strong>{{ p.barcode_palete }}</strong></p>
+            <p>SKU: {{ p.sku }} — Lote: {{ p.lote }}</p>
+            <p>{{ p.descricao }}</p>
+            <p>Peso: {{ p.peso_kg }} kg</p>
+
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="palete_id" value="{{ p.pk }}">
+                <label for="area-{{ p.pk }}">Área de destino</label>
+                <select name="area_destino" id="area-{{ p.pk }}" required>
+                    {% for area in areas %}
+                        <option value="{{ area.pk }}">{{ area.nome }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" name="acao" value="aprovar">Aprovar e Imprimir</button>
+                <button type="submit" name="acao" value="rejeitar" class="btn-rejeitar">Marcar Divergente</button>
+            </form>
+        </div>
+    {% endfor %}
+</div>
+{% endblock %}

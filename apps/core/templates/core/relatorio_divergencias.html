@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+
+{% block title %}Relatório de Divergências{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <strong>Relatório de Divergências</strong>
+    <a href="{% url 'home' %}">Início</a>
+</div>
+<div class="container">
+    <h1>Paletes Armazenados — Pendentes de Confirmação</h1>
+
+    {% for mensagem in messages %}
+        <p class="{% if mensagem.tags == 'error' %}erro{% else %}ok{% endif %}">{{ mensagem }}</p>
+    {% endfor %}
+
+    {% if paletes %}
+        <ul>{% for p in paletes %}<li>{{ p.barcode_palete }} — SKU {{ p.sku }} — Lote {{ p.lote }} — Endereço {{ p.endereco.codigo }}</li>{% endfor %}</ul>
+    {% else %}
+        <p>Nenhum palete armazenado aguardando confirmação.</p>
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+        <label for="{{ form.senha.id_for_label }}">{{ form.senha.label }} do Gestor para autorizar</label>
+        {{ form.senha }}
+        {% for erro in form.senha.errors %}<p class="erro">{{ erro }}</p>{% endfor %}
+        <button type="submit">Confirmar Armazenagem e Sincronizar SAP</button>
+    </form>
+</div>
+{% endblock %}

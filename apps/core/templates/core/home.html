@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+
+{% block title %}Início — WMS{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <strong>WMS · Café do Sítio</strong>
+    <form method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <button type="submit">Sair</button>
+    </form>
+</div>
+<div class="container">
+    <h1>Bem-vindo, {{ user.username }}</h1>
+    <p>Grupos: {% for g in user.groups.all %}{{ g.name }}{% if not forloop.last %}, {% endif %}{% empty %}Nenhum{% endfor %}</p>
+    <p><a class="btn" href="{% url 'recebimento:novo' %}">Recebimento de Paletes</a></p>
+    <p><a class="btn" href="{% url 'recebimento:conferencia_gestor' %}">Conferência do Gestor</a></p>
+    <p><a class="btn" href="{% url 'estoque:putaway' %}">Armazenagem (Put-away)</a></p>
+    <p><a class="btn" href="{% url 'estoque:mapa_estoque' %}">Mapa de Estoque</a></p>
+    <p><a class="btn" href="{% url 'relatorio_divergencias' %}">Relatório de Divergências (Gestor)</a></p>
+</div>
+{% endblock %}

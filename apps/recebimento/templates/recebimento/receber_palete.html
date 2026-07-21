@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+
+{% block title %}Recebimento — WMS{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <strong>Recebimento</strong>
+    <a href="{% url 'home' %}">Início</a>
+</div>
+<div class="container">
+    <h1>Conferência de Entrada</h1>
+
+    {% for mensagem in messages %}
+        <p class="{% if mensagem.tags == 'error' %}erro{% else %}ok{% endif %}">{{ mensagem }}</p>
+    {% endfor %}
+
+    <form method="post">
+        {% csrf_token %}
+        {% for campo in form %}
+            <label for="{{ campo.id_for_label }}">{{ campo.label }}</label>
+            {{ campo }}
+            {% for erro in campo.errors %}<p class="erro">{{ erro }}</p>{% endfor %}
+        {% endfor %}
+        <button type="submit">Confirmar Palete</button>
+    </form>
+</div>
+<script>
+(function () {
+    var campo = document.getElementById('id_peso_kg');
+    if (!campo) return;
+    var casasDecimais = 3;
+
+    function formatar(valor) {
+        var digitos = valor.replace(/\D/g, '');
+        while (digitos.length <= casasDecimais) digitos = '0' + digitos;
+        var inteiro = digitos.slice(0, -casasDecimais).replace(/^0+(?=\d)/, '');
+        var decimal = digitos.slice(-casasDecimais);
+        inteiro = inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        return inteiro + ',' + decimal;
+    }
+
+    if (campo.value) campo.value = formatar(campo.value);
+
+    campo.addEventListener('input', function () {
+        campo.value = formatar(campo.value);
+    });
+
+    campo.form.addEventListener('submit', function () {
+        campo.value = campo.value.replace(/\./g, '').replace(',', '.');
+    });
+})();
+</script>
+{% endblock %}
