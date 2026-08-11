@@ -17,8 +17,8 @@ O objetivo principal do Projeto WMS é implantar o controle de estoque por lote 
 ## 3. Arquitetura de Dados (Modelos no Django)
 A estrutura de tabelas será gerenciada integralmente pelo Django ORM, garantindo portabilidade entre SQLite3 e MySQL:
 
-* **Endereços (`Endereco`):** Matriz de armazenamento físico do galpão representando Corredores (01 a 20) e Andares (A, B, C). Controla a capacidade máxima rígida de 21 paletes por endereço.
-* **Paletes (`Palete`):** Unidade logística principal. Registra o código de barras gerado, SKU, lote, peso real coletado, localização atual e status do ciclo de vida.
+* **Endereços (`Endereco`):** Matriz de armazenamento físico do galpão representando Guardas (01 a 20), Andares (A, B, C) e Lados (01, 02). Controla a capacidade máxima rígida de 21 paletes por endereço.
+* **Paletes (`Palete`):** Unidade logística principal. Registra o código de barras gerado, SKU, lote digitado manualmente, peso fixo (500 kg), localização atual e status do ciclo de vida.
 * **Histórico de Movimentações:** Logs de auditoria vinculados ao sistema de usuários do Django (`auth.User`) para rastrear quem, quando e para onde moveu cada palete.
 * **Fila de Integração (Outbox):** Tabela intermediária para registrar eventos de escrita e sincronização pendentes com o SAP B1.
 
@@ -29,13 +29,12 @@ A estrutura de tabelas será gerenciada integralmente pelo Django ORM, garantind
 ### 4.1. Recebimento e Conferência (Entrada)
 1. A produção agrupa as embalagens de café em paletes, filma, pesa e gera uma etiqueta inicial com data e peso.
 2. Na área de transição, a Logística utiliza o coletor Zebra na tela do sistema WMS.
-3. O operador lê o SKU, o Lote e digita/confirma o peso de cada palete. Os campos utilizam a tag HTML5 `autofocus` para permitir bipagem contínua sem cliques do mouse.
-4. O sistema valida os dados e o backend Django dispara diretamente via socket de rede a impressão da etiqueta ZPL interna para identificação definitiva do palete.
-5. `[INVARIANTE]` Se houver divergências nos dados cadastrais ou falha de validação, o palete é marcado como `DIVERGENTE` e travado no fluxo.
+3. O operador seleciona o SKU e digita manualmente o Lote de cada palete; o peso é fixo em 500 kg, aplicado automaticamente pelo sistema, sem digitação do operador. Os campos utilizam a tag HTML5 `autofocus` para permitir bipagem contínua sem cliques do mouse.
+4. O sistema registra o palete e o backend Django dispara imediatamente via socket de rede a impressão da etiqueta ZPL interna para identificação definitiva do palete — sem etapa de validação ou aprovação prévia, já que o objetivo do projeto é não ter divergências.
 
 ### 4.2. Mapa de Armazenamento e Guardada (Estoque)
 1. `[INVARIANTE]` O operador de empilhadeira só visualiza o mapa de armazenamento de um lote se a transferência física de saldo da Produção (`001-06`) para a Logística (`001-02`) já tiver sido efetivada no SAP B1.
-2. Ao colocar o palete na prateleira física, o operador lê a etiqueta do palete e o código de barras do endereço (ex: `14-C`).
+2. Ao colocar o palete na prateleira física, o operador seleciona o endereço diretamente no mapa de estoque (grid clicável), sem digitar o código (ex: `001-02-C-14-01`).
 3. `[INVARIANTE]` O Django ORM utiliza a trava de concorrência `.select_for_update()` para validar de forma isolada se a ocupação do endereço é menor que 21. Se o endereço estiver cheio, o bipe é rejeitado imediatamente na tela do coletor.
 4. Ao final da tarefa, o Gestor de Logística revisa o comparativo entre o planejado e o executado, digitando sua senha de acesso para autorizar o encerramento do lote de guarda e disparar a atualização no ERP.
 
@@ -48,7 +47,7 @@ A estrutura de tabelas será gerenciada integralmente pelo Django ORM, garantind
 
 ## 5. Matriz de Permissões (Django Groups)
 * **ADMIN:** Acesso total ao painel administrativo do Django (`/admin`), parametrização de IPs de rede das impressoras e gerenciamento de usuários.
-* **Gestor:** Acesso a relatórios de divergência de peso, dashboards operacionais e à view de liberação/aprovação por senha.
+* **Gestor:** Acesso a dashboards operacionais e à view de liberação/aprovação por senha.
 * **Colaborador:** Interface minimalista e de alto contraste adaptada para o coletor (bipes de entrada, conferência de mapa e separação).
 
 ---
@@ -61,7 +60,7 @@ A estrutura de tabelas será gerenciada integralmente pelo Django ORM, garantind
 * **Milestone 1: Autenticação e Matriz de Grupos**
   * Configuração do fluxo de login e criação automática dos grupos de permissões via Data Migration.
 * **Milestone 2: Carga Inicial de Endereços**
-  * Desenvolvimento do comando customizado `python manage.py gerar_estrutura_armazem` para criar a matriz exata de 60 posições (`CC-A`).
+  * Desenvolvimento do comando customizado `python manage.py gerar_estrutura_armazem` para criar a matriz exata de 120 posições (`001-LL-A-GG-01`).
 * **Milestone 3: Módulo de Entrada & Impressão Socket**
   * Criação das Views de recebimento com foco automático e rotina em Python para envio da string ZPL via TCP/IP na porta 9100.
 * **Milestone 4: Put-away e Proteção de Capacidade**

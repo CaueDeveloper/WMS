@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+
+{% block title %}Consultar Palete — WMS{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <strong>Consultar Palete</strong>
+    <a href="{% url 'home' %}">Início</a>
+</div>
+<div class="container">
+    <h1>Consultar Palete — Bipagem</h1>
+
+    {% for mensagem in messages %}
+        <p class="{% if mensagem.tags == 'error' %}erro{% else %}ok{% endif %}">{{ mensagem }}</p>
+    {% endfor %}
+
+    {% if palete %}
+        <div class="cartao">
+            <p><strong>{{ palete.barcode_palete }}</strong></p>
+            <p>SKU: {{ palete.sku }} — Lote: {{ palete.lote }}</p>
+            <p>{{ palete.descricao }}</p>
+            <p>Peso: {{ palete.peso_kg }} kg — Destino: {{ palete.area_destino.nome|default:"—" }}</p>
+            <p>Status: <strong>{{ palete.get_estado_display }}</strong></p>
+            <p>Endereço atual: <strong>{{ palete.endereco.codigo|default:"—" }}</strong></p>
+        </div>
+
+        {% if palete.estado == 'ARMAZENADO' %}
+            <form method="post" autocomplete="off">
+                {% csrf_token %}
+                <input type="hidden" name="barcode_palete" value="{{ palete.barcode_palete }}">
+                <label for="id_novo_codigo_endereco">Bipe ou digite o novo endereço</label>
+                <input type="text" name="novo_codigo_endereco" id="id_novo_codigo_endereco" autofocus autocomplete="off" required>
+                <button type="submit">Alterar Endereço</button>
+            </form>
+
+            <h2>Endereços disponíveis</h2>
+            {% if enderecos %}<ul>
+                {% for endereco in enderecos %}<li>{{ endereco.codigo }} ({{ endereco.ocupacao_atual }}/{{ endereco.capacidade }})</li>{% endfor %}
+            </ul>{% else %}<p>Nenhum endereço disponível no momento.</p>{% endif %}
+
+            <form method="post" autocomplete="off">
+                {% csrf_token %}
+                <input type="hidden" name="barcode_palete" value="{{ palete.barcode_palete }}">
+                <input type="hidden" name="retirar" value="1">
+                <button type="submit" class="btn-rejeitar">Retirar do Mapa (Saída Física)</button>
+            </form>
+        {% endif %}
+
+        <p><a class="btn" href="{% url 'estoque:consultar_palete' %}">Bipar outro palete</a></p>
+    {% else %}
+        <form method="post" autocomplete="off">
+            {% csrf_token %}
+            <label for="id_barcode_palete">Bipe o palete</label>
+            <input type="text" name="barcode_palete" id="id_barcode_palete" autofocus autocomplete="off" required>
+            <button type="submit">Buscar Palete</button>
+        </form>
+    {% endif %}
+</div>
+{% endblock %}

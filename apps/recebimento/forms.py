@@ -9,9 +9,11 @@ class RecebimentoForm(forms.Form):
         label='Produto',
         widget=forms.Select(attrs={'autofocus': True}),
     )
-    peso_kg = forms.DecimalField(
-        label='Peso (kg)',
-        max_digits=12,
-        decimal_places=3,
-        widget=forms.TextInput(attrs={'inputmode': 'decimal', 'placeholder': '0,000', 'autocomplete': 'off'}),
+    lote = forms.CharField(
+        label='Lote',
+        max_length=60,
+        widget=forms.TextInput(attrs={'autocomplete': 'off'}),
     )
+
+    def clean_lote(self):
+        return self.cleaned_data['lote'].strip().upper()

@@ -13,10 +13,10 @@
 <div class="container">
     <h1>Bem-vindo, {{ user.username }}</h1>
     <p>Grupos: {% for g in user.groups.all %}{{ g.name }}{% if not forloop.last %}, {% endif %}{% empty %}Nenhum{% endfor %}</p>
-    <p><a class="btn" href="{% url 'recebimento:novo' %}">Recebimento de Paletes</a></p>
-    <p><a class="btn" href="{% url 'recebimento:conferencia_gestor' %}">Conferência do Gestor</a></p>
-    <p><a class="btn" href="{% url 'estoque:putaway' %}">Armazenagem (Put-away)</a></p>
+    <p><a class="btn" href="{% url 'recebimento:novo' %}">Produção</a></p>
+    <p><a class="btn" href="{% url 'recebimento:transferencia_gestor' %}">Transferência: Produção</a></p>
+    <p><a class="btn" href="{% url 'estoque:putaway' %}">Transferência: Logística</a></p>
     <p><a class="btn" href="{% url 'estoque:mapa_estoque' %}">Mapa de Estoque</a></p>
-    <p><a class="btn" href="{% url 'relatorio_divergencias' %}">Relatório de Divergências (Gestor)</a></p>
+    <p><a class="btn" href="{% url 'estoque:consultar_palete' %}">Consultar Palete</a></p>
 </div>
 {% endblock %}

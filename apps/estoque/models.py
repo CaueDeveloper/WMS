@@ -9,12 +9,17 @@ class Endereco(models.Model):
         ('C', 'Andar C'),
     ]
 
-    corredor = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(20)])
+    guarda = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(20)])
+    lado = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(2)])
     andar = models.CharField(max_length=1, choices=ANDAR_CHOICES)
-    codigo = models.CharField(max_length=10, unique=True)  # Ex: "02-B"
+    codigo = models.CharField(max_length=14, unique=True)  # Ex: "001-01-A-04-01"
     capacidade = models.IntegerField(default=21)
     ocupacao_atual = models.IntegerField(default=0)
     ativo = models.BooleanField(default=True)
+
+    @staticmethod
+    def montar_codigo(lado, andar, guarda):
+        return f'001-{lado:02d}-{andar}-{guarda:02d}-01'
 
     def __str__(self):
         return self.codigo

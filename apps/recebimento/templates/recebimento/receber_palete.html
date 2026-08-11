@@ -24,30 +24,4 @@
         <button type="submit">Confirmar Palete</button>
     </form>
 </div>
-<script>
-(function () {
-    var campo = document.getElementById('id_peso_kg');
-    if (!campo) return;
-    var casasDecimais = 3;
-
-    function formatar(valor) {
-        var digitos = valor.replace(/\D/g, '');
-        while (digitos.length <= casasDecimais) digitos = '0' + digitos;
-        var inteiro = digitos.slice(0, -casasDecimais).replace(/^0+(?=\d)/, '');
-        var decimal = digitos.slice(-casasDecimais);
-        inteiro = inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-        return inteiro + ',' + decimal;
-    }
-
-    if (campo.value) campo.value = formatar(campo.value);
-
-    campo.addEventListener('input', function () {
-        campo.value = formatar(campo.value);
-    });
-
-    campo.form.addEventListener('submit', function () {
-        campo.value = campo.value.replace(/\./g, '').replace(',', '.');
-    });
-})();
-</script>
 {% endblock %}

@@ -2,7 +2,7 @@
 
 > **Projeto:** Café do Sítio  
 > **Objetivo:** Sistema intermediário de controle de estoque na transição entre Produção e Logística  
-> **Status:** Em desenvolvimento (Milestones M0–M4 implementados)
+> **Status:** Em desenvolvimento (Milestones M0–M6 implementados)
 
 ## 📋 Visão Geral
 
@@ -10,16 +10,17 @@ O WMS é uma camada de controle de estoque que **não substitui o SAP B1**, mas 
 
 - **Entrada de paletes** com validação de SKU e lote
 - **Armazenagem com mapa visual** em grade fixa de endereços
-- **Separação por romaneio** com controle de divergências
+- **Separação por romaneio** para expedição
 - **Impressão de etiquetas** em impressoras Zebra ZT421
 
 ### Características Principais
 
 ✅ Autenticação nativa Django com grupos (`Administradores`, `Gestores`, `Operadores`)  
-✅ Modelo de palete com estados (`CRIADO` → `CONFERIDO` → `ARMAZENADO` → `FINALIZADO`)  
+✅ Modelo de palete com estados (`CRIADO` → `EM_TRANSFERENCIA` → `CONFERIDO` → `ARMAZENADO` → `FINALIZADO`)  
 ✅ Endereçamento em grade (Corredores 01–20 × Andares A/B/C = 60 locais)  
 ✅ Capacidade rígida por endereço (21 paletes) com proteção contra condição de corrida  
-✅ Impressão assíncrona via ZPL (Zebra DataWedge em modo emulação de teclado)  
+✅ Impressão assíncrona via ZPL, disparada imediatamente na entrada (Zebra DataWedge em modo emulação de teclado)  
+✅ Aprovação em lote pelo Gestor com notificação automática via WhatsApp (Z-API) para a Logística  
 ✅ Reautenticação por senha do Gestor antes de finalizar guardas  
 
 ## 🛠️ Stack Técnico
@@ -30,6 +31,7 @@ O WMS é uma camada de controle de estoque que **não substitui o SAP B1**, mas 
 | **Banco de Dados** | SQLite (dev) / MySQL (prod) |
 | **Frontend** | HTML5 + CSS3 (sem SPA) |
 | **Impressão** | Zebra ZT421 via ZPL (TCP/IP porta 9100) |
+| **Notificação** | Z-API (WhatsApp Business API) via HTTP, `urllib` (sem dependências externas) |
 | **Coleta** | Zebra DataWedge em emulação de teclado |
 | **Autenticação** | Django Auth nativo + `auth.Group` |
 
@@ -46,7 +48,7 @@ WMS2/
 ├── apps/                         # Aplicativos Django
 │   ├── core/                    # Autenticação, grupos, decoradores
 │   │   ├── decorators.py       # @group_required
-│   │   ├── views.py            # Login, logout, relatorio_divergencias
+│   │   ├── views.py            # Login, logout, confirmar_armazenagem
 │   │   ├── models.py           # (sem modelos específicos)
 │   │   ├── migrations/
 │   │   │   └── 0001_popular_grupos.py  # Popula Administradores, Gestores, Operadores
@@ -62,13 +64,15 @@ WMS2/
 │   │   ├── tests.py            # Testes de concorrência e validação
 │   │   └── templates/estoque/  # putaway.html, mapa_estoque.html
 │   │
-│   └── recebimento/            # Entrada, conferência, impressão ZPL
-│       ├── models.py           # Palete, ContadorLote
-│       ├── views.py            # receber_palete, conferencia_gestor
+│   └── recebimento/            # Entrada, transferência, impressão ZPL, notificação WhatsApp
+│       ├── models.py           # Palete
+│       ├── views.py            # receber_palete, transferencia_gestor
+│       ├── services.py         # aprovar_lote (transação + lock)
 │       ├── forms.py            # RecebimentoForm
 │       ├── zpl.py              # disparar_impressao_async (socket TCP/IP)
-│       ├── tests.py            # Testes de ZPL, permissões, fluxos
-│       └── templates/recebimento/  # receber_palete.html, conferencia_gestor.html
+│       ├── whatsapp.py         # disparar_notificacao_async (Z-API via HTTP)
+│       ├── tests.py            # Testes de ZPL, WhatsApp, permissões, fluxos
+│       └── templates/recebimento/  # receber_palete.html, transferencia_gestor.html
 │
 ├── docs/                        # Documentação
 │   ├── PRD.md                  # Product Requirements Document
@@ -121,6 +125,22 @@ python manage.py runserver
 
 Acesse `http://localhost:8000/` no navegador.
 
+## 📱 Testar com um Coletor Físico (Zebra MC2700/TC52)
+
+Por padrão o servidor só aceita conexões vindas da própria máquina (`localhost`). Para testar em um coletor real na mesma rede Wi-Fi:
+
+1. **Descubra o IP da máquina de desenvolvimento** (Windows: `ipconfig`, procure o adaptador conectado à rede — ex.: `10.61.1.193`).
+2. **Confirme que esse IP está em `ALLOWED_HOSTS`** em `wms/settings.py` (ajuste se a máquina reconectou e o IP mudou).
+3. **Suba o servidor escutando em todas as interfaces**, não só localhost:
+   ```bash
+   python manage.py runserver 0.0.0.0:8000
+   ```
+4. **Libere a porta no Firewall do Windows**, se solicitado pelo prompt "Permitir acesso" na primeira execução.
+5. **No coletor**, configure o perfil do Zebra DataWedge em modo *Keystroke/HID output* apontando para o navegador, e acesse `http://<IP-da-máquina>:8000/` (ex.: `http://10.61.1.193:8000/`).
+6. **Faça login** com um dos usuários de demonstração (`operador` / `Operador@123` ou `gestor` / `Gestor@123`).
+
+> ⚠️ O campo **Produto** na tela de recebimento (`/recebimento/receber/`) é um menu suspenso (`<select>`), não um campo de texto — bipar um código de barras nele não funciona de forma confiável. O teste real de bipagem contínua vale para os campos de texto: **Sequencial**, **Peso** (na entrada) e **Código do Palete** / **Código do Endereço** (no put-away, `/estoque/putaway/`).
+
 ## 🔄 Fluxo de Trabalho
 
 ### 1️⃣ Recebimento (Colaborador)
@@ -133,35 +153,38 @@ Colaborador envia dados do palete:
 - Descrição
 - Peso
 
-**Validação:** Peso `<= 0` → Estado `DIVERGENTE` (trava)  
-**Resultado:** Palete em estado `CRIADO` (aguardando conferência)
+**Validação:** Nenhuma — o objetivo do projeto é nunca ter paletes divergentes, então qualquer peso é aceito.  
+**Resultado:** Palete em estado `CRIADO` e a etiqueta é impressa **imediatamente** na Zebra ZT421, sem esperar aprovação do Gestor.
 
-### 2️⃣ Conferência (Gestor)
+### 2️⃣ Transferência (Gestor)
 
-**Rota:** `/recebimento/conferencia/`  
+**Rota:** `/recebimento/transferencia/`  
 **Permissão:** Grupo `Gestores`
 
-Gestor analisa paletes `CRIADO` e:
-- **Aprova** + escolhe `AreaDestino` → Estado `CONFERIDO` + dispara impressão ZPL
-- **Rejeita** → Estado `DIVERGENTE`
+Gestor bipa com o coletor cada palete impresso:
+- Cada bipagem move o palete `CRIADO` → `EM_TRANSFERENCIA`, entrando numa fila organizada por `lote`.
+- Não há rejeição manual individual.
 
-Neste momento, a etiqueta é impressa na Zebra ZT421.
+Quando todos os paletes do lote (mesmo SKU/dia) estiverem na fila, o Gestor **aprova o lote inteiro de uma vez**, escolhendo uma única `AreaDestino`:
+- Estado `EM_TRANSFERENCIA` → `CONFERIDO` para todos os paletes do lote.
+- Dispara automaticamente uma notificação via WhatsApp (Z-API) para o Gestor de Logística.
 
-### 3️⃣ Put-away (Colaborador)
+### 3️⃣ Put-away (Gestor de Logística)
 
-**Rota:** `/estoque/putaway/`
+**Rota:** `/estoque/putaway/`  
+**Permissão:** Nenhuma restrição de grupo — aberta a qualquer usuário autenticado; na prática, é o Gestor de Logística que recebe a notificação quem bipa fisicamente
 
 **Etapa A:** Bipador lê o barcode do palete  
-→ Sistema mostra SKU/descrição/lote/peso
+→ Sistema mostra SKU/descrição/lote/peso/área de destino
 
-**Etapa B:** Colaborador bipa/digita o código do endereço  
+**Etapa B:** Gestor de Logística bipa/digita o código do endereço  
 → Sistema aloca o palete (ou rejeita se endereço cheio)
 
 **Resultado:** Palete em estado `ARMAZENADO`
 
 ### 4️⃣ Confirmação Final (Gestor)
 
-**Rota:** `/relatorios/divergencias/`  
+**Rota:** `/armazenagem/confirmar/`  
 **Permissão:** Reautenticação por senha
 
 Gestor revisa paletes `ARMAZENADO` e confirma com sua senha:
@@ -173,10 +196,10 @@ Gestor revisa paletes `ARMAZENADO` e confirma com sua senha:
 | Regra | Descrição |
 |-------|-----------|
 | **SAP B1 é a fonte única de saldo** | WMS nunca altera saldo direto; apenas via Outbox |
-| **Palete divergente trava o fluxo** | SKU/Lote inválido ou inconsistência grave → `DIVERGENTE` |
 | **Capacidade rígida de endereço** | Máximo 21 paletes por endereço; proteção contra race condition |
 | **Reautenticação obrigatória** | Confirmação final exige senha do Gestor |
-| **Impressão após aprovação** | Etiqueta só imprime quando Gestor aprova, não no envio |
+| **Impressão imediata na entrada** | Etiqueta imprime assim que o palete é criado, sem validação nem aprovação prévia — objetivo do projeto é nunca ter divergências |
+| **Aprovação em lote** | Gestor aprova todos os paletes `EM_TRANSFERENCIA` de um mesmo `lote` de uma vez, com `.select_for_update()` |
 
 ## 🗂️ Modelos de Dados
 
@@ -196,10 +219,10 @@ class Endereco(models.Model):
 class Palete(models.Model):
     ESTADOS = [
         ('CRIADO', 'Criado'),
+        ('EM_TRANSFERENCIA', 'Em Transferência'),
         ('CONFERIDO', 'Conferido'),
         ('ARMAZENADO', 'Armazenado'),
         ('FINALIZADO', 'Finalizado'),
-        ('DIVERGENTE', 'Divergente'),
     ]
     barcode_palete = models.CharField(max_length=50, unique=True)
     sku = models.CharField(max_length=50)
@@ -215,16 +238,15 @@ class Palete(models.Model):
 ## 📊 Estados do Palete
 
 ```
-CRIADO
-  ↓ (Gestor aprova)
-CONFERIDO → (disparar_impressao_async)
-  ↓
-ARMAZENADO (após putaway)
+CRIADO → (disparar_impressao_async, imediato)
+  ↓ (Gestor bipa no coletor)
+EM_TRANSFERENCIA
+  ↓ (Gestor aprova o lote inteiro + disparar_notificacao_async)
+CONFERIDO
+  ↓ (Gestor de Logística faz o putaway)
+ARMAZENADO
   ↓ (Gestor confirma com senha)
 FINALIZADO
-
-OU em qualquer etapa:
-DIVERGENTE (erro de validação ou rejeição)
 ```
 
 ## 🖨️ Impressão ZPL
@@ -239,6 +261,20 @@ A impressão é disparada de forma **assíncrona** em thread daemon via `apps/re
 ```python
 # Exemplo de ativação
 disparar_impressao_async(palete_id=123)
+```
+
+## 💬 Notificação WhatsApp (Z-API)
+
+Quando o Gestor aprova um lote inteiro na tela de transferência, uma notificação é disparada de forma **assíncrona** em thread daemon via `apps/recebimento/whatsapp.py::disparar_notificacao_async` — mesmo padrão de resiliência da impressão ZPL (thread não bloqueia a resposta HTTP, falhas de rede só são logadas):
+
+- **Provedor:** Z-API (WhatsApp Business API)
+- **Protocolo:** HTTP `POST` via `urllib` (sem dependências externas)
+- **Destinatário:** Número fixo do Gestor de Logística, configurável via `ZAPI_LOGISTICA_WHATSAPP_NUMBER` em `settings.py`
+- **Conteúdo:** Lote, SKU, quantidade de paletes, peso total, área de destino e a lista de barcodes aprovados
+
+```python
+# Exemplo de ativação
+disparar_notificacao_async(lote, area_destino, paletes)
 ```
 
 ## 🧪 Testes
@@ -262,7 +298,7 @@ python manage.py test --verbosity=2
 
 - ✅ Autenticação e grupos (`core/tests.py`)
 - ✅ Alojamento e concorrência (`estoque/tests.py`)
-- ✅ Validação de palete e ZPL (`recebimento/tests.py`)
+- ✅ Validação de palete, ZPL, transferência/aprovação de lote e notificação WhatsApp (`recebimento/tests.py`)
 
 ## 🔐 Autenticação e Grupos
 
@@ -271,8 +307,8 @@ Três grupos pré-populados:
 | Grupo | Permissões |
 |-------|-----------|
 | **Administradores** | Acesso total (admin, todas as views) |
-| **Gestores** | Conferência, aprovação, confirmação final |
-| **Operadores** | Recebimento, put-away |
+| **Gestores** | Transferência (bipagem + aprovação de lote), confirmação final |
+| **Operadores** | Recebimento; put-away é aberto a qualquer usuário autenticado |
 
 Use o decorator `@group_required('NomeGrupo')` para proteger views.
 
@@ -309,6 +345,14 @@ IMPRESSORA_ZPL_HOST = '192.168.1.100'  # IP da impressora
 IMPRESSORA_ZPL_PORT = 9100              # Porta TCP/IP
 ```
 
+**Z-API (WhatsApp):**
+```python
+ZAPI_INSTANCE_ID = '...'                          # ID da instância Z-API
+ZAPI_TOKEN = '...'                                # Token da instância
+ZAPI_CLIENT_TOKEN = '...'                         # Client-Token (conta Z-API)
+ZAPI_LOGISTICA_WHATSAPP_NUMBER = '5511999999999'  # Número do Gestor de Logística
+```
+
 ## 📚 Documentação Adicional
 
 - **[PRD.md](docs/PRD.md)** — Product Requirements Document (requisitos detalhados)
@@ -343,5 +387,7 @@ Este projeto é propriedade da Café do Sítio. Todos os direitos reservados.
 - [x] **M2** — Carga inicial de endereços
 - [x] **M3** — Módulo de entrada (recebimento + impressão)
 - [x] **M4** — Put-away e concorrência
+- [x] **M5** — Impressão imediata, transferência por bipagem, aprovação em lote e notificação WhatsApp (Z-API)
+- [x] **M6** — Remoção do estado DIVERGENTE (peso sempre aceito, sem bloqueio de fluxo)
 
 **Próximas etapas:** Integração com SAP B1 (Outbox), testes em produção, otimizações de performance.

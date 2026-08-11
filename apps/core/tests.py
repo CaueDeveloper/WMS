@@ -54,18 +54,18 @@ class AutenticacaoEPermissoesTests(TestCase):
         self.assertRedirects(response, reverse('home'))
 
     def test_anonimo_e_redirecionado_para_login(self):
-        destino = reverse('relatorio_divergencias')
+        destino = reverse('confirmar_armazenagem')
         response = self.client.get(destino)
         self.assertRedirects(response, f"{reverse('login')}?next={destino}")
 
-    def test_operador_recebe_403_no_relatorio_do_gestor(self):
+    def test_operador_recebe_403_na_confirmacao_do_gestor(self):
         self.client.login(username='operador1', password='senha-teste-123')
-        response = self.client.get(reverse('relatorio_divergencias'))
+        response = self.client.get(reverse('confirmar_armazenagem'))
         self.assertEqual(response.status_code, 403)
 
-    def test_gestor_acessa_relatorio(self):
+    def test_gestor_acessa_confirmacao(self):
         self.client.login(username='gestor1', password='senha-teste-123')
-        response = self.client.get(reverse('relatorio_divergencias'))
+        response = self.client.get(reverse('confirmar_armazenagem'))
         self.assertEqual(response.status_code, 200)
 
 
@@ -75,7 +75,11 @@ class ConfirmacaoArmazenagemTests(TestCase):
         self.gestor = User.objects.create_user('gestor2', password='senha-gestor-123')
         self.gestor.groups.add(Group.objects.get(name='Gestores'))
 
-        self.endereco = Endereco.objects.create(corredor=5, andar='A', codigo='05-A', capacidade=21, ocupacao_atual=1)
+        self.endereco = Endereco.objects.create(
+            guarda=5, lado=1, andar='A',
+            codigo=Endereco.montar_codigo(lado=1, andar='A', guarda=5),
+            capacidade=21, ocupacao_atual=1,
+        )
         self.palete = Palete.objects.create(
             sku='CAFE-X', lote='L-X', descricao='Café X', peso_kg='10.000',
             estado='ARMAZENADO', endereco=self.endereco,
@@ -83,13 +87,13 @@ class ConfirmacaoArmazenagemTests(TestCase):
         self.client.login(username='gestor2', password='senha-gestor-123')
 
     def test_senha_correta_finaliza_paletes_armazenados(self):
-        response = self.client.post(reverse('relatorio_divergencias'), {'senha': 'senha-gestor-123'})
-        self.assertRedirects(response, reverse('relatorio_divergencias'))
+        response = self.client.post(reverse('confirmar_armazenagem'), {'senha': 'senha-gestor-123'})
+        self.assertRedirects(response, reverse('confirmar_armazenagem'))
         self.palete.refresh_from_db()
         self.assertEqual(self.palete.estado, 'FINALIZADO')
 
     def test_senha_incorreta_nao_altera_estado(self):
-        response = self.client.post(reverse('relatorio_divergencias'), {'senha': 'senha-errada'})
+        response = self.client.post(reverse('confirmar_armazenagem'), {'senha': 'senha-errada'})
         self.assertEqual(response.status_code, 200)
         self.palete.refresh_from_db()
         self.assertEqual(self.palete.estado, 'ARMAZENADO')

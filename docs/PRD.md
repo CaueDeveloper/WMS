@@ -37,8 +37,9 @@ A operação atual depende de processos manuais (pesagem manual, conferências i
 | **D3** | Interface | **Views Django Tradicionais (HTML5 + CSS3 customizado).** | Interface leve e responsiva. Sem SPAs pesadas (React/Node). Foco em desempenho nos coletores. |
 | **D4** | Hardware Coleta | Coletores **Zebra MC2700 e TC52** via DataWedge (Emulação de teclado). | O layout CSS deve ser otimizado para o pior caso de tela: **Zebra MC2700 (4" - 800×480)**. |
 | **D5** | Impressão | Impressora térmica industrial **Zebra ZT421** via linguagem **ZPL**. | O backend Django abre um Socket TCP/IP na porta `9100` e envia a string ZPL diretamente para o IP da impressora. |
-| **D6** | Endereçamento | Grade de **Corredores (01-20) × Andares (A, B, C)**. | Total de 60 endereços físicos (`CC-A`). **Capacidade máxima rígida de 21 paletes por endereço**. |
+| **D6** | Endereçamento | Grade de **Guardas (01-20) × Andares (A, B, C) × Lados (01, 02)**. | Total de 120 endereços físicos, código de 5 segmentos `001-LL-A-GG-01` (ex.: `001-02-A-20-01`). **Capacidade máxima rígida de 21 paletes por endereço**. |
 | **D7** | Autenticação | **Django Auth System** com controle por Grupos (`auth.Group`). | Permissões controladas via decorators (`@permission_required`) ou mixins nas Views. |
+| **D8** | Notificação | **Z-API (WhatsApp Business API)** avisa o Gestor de Logística quando um lote é aprovado. | O backend Django faz um `POST` HTTP (via `urllib`, sem dependências externas) para a API do Z-API, de forma assíncrona (thread), substituindo o aviso manual por grupos de WhatsApp. |
 
 ### 2.1 Premissas Explícitas `[ASSUMPTION]`
 * `A1`: O coletor Zebra opera em modo online contínuo via Wi-Fi interno da empresa.
@@ -52,7 +53,7 @@ A operação atual depende de processos manuais (pesagem manual, conferências i
 O controle de acessos será gerenciado nativamente pelo sistema de permissões do Django:
 
 * **ADMIN (`Superuser`):** Acesso irrestrito ao painel administrativo do Django (`/admin`), configuração de parâmetros do sistema, cadastro de equipamentos (IPs de impressoras) e reset de dados.
-* **Gestor (`grupo_gestores`):** Acesso a dashboards de conferência, relatórios de divergências de peso e à tela de aprovação de armazenamento (exige inserção de senha para confirmar as guardas feitas no estoque).
+* **Gestor (`grupo_gestores`):** Acesso a dashboards de conferência e à tela de aprovação de armazenamento (exige inserção de senha para confirmar as guardas feitas no estoque).
 * **Colaborador (`grupo_operadores`):** Acesso exclusivo às telas simplificadas de operação no coletor: bipagem de entrada, consulta ao mapa de put-away e separação de romaneios.
 
 ---
@@ -61,15 +62,14 @@ O controle de acessos será gerenciado nativamente pelo sistema de permissões d
 
 ### 4.1 Entrada (Recebimento e Conferência)
 1. O operador abre a tela de recebimento no coletor. O cursor já inicia focado no primeiro campo (`autofocus`).
-2. O operador bipa o SKU e o Lote, e insere o peso do palete (capturado da etiqueta prévia da produção).
-3. O Django valida as informações. Se válidas, o backend monta o layout da etiqueta em ZPL e despacha os bytes via socket de rede para a impressora Zebra ZT421 (porta 9100).
-4. `[INVARIANTE]` Se o SKU ou Lote não forem validados ou se houver inconsistências graves, o palete assume o estado `DIVERGENTE` e o avanço no fluxo é bloqueado.
+2. O operador seleciona o Produto (SKU) e digita manualmente o Sequencial e o Lote (transcrito da etiqueta/papelada prévia da produção). O peso é fixo em 500 kg, aplicado automaticamente pelo sistema — não há digitação de peso pelo operador.
+3. O Django registra o palete e imediatamente monta o layout da etiqueta em ZPL e despacha os bytes via socket de rede para a impressora Zebra ZT421 (porta 9100), sem etapa de validação ou aprovação prévia — o objetivo do fluxo é nunca gerar paletes divergentes.
 
 ### 4.2 Armazenagem (Mapa e Put-away)
 1. `[INVARIANTE]` O operador de empilhadeira só visualizará as orientações do mapa de armazenamento na tela se a transferência de saldo da produção para a logística já tiver sido processada no SAP B1.
-2. Ao alocar o palete na estrutura física, o operador lê a etiqueta do palete e o código de barras de identificação do endereço (ex: `04-B`).
+2. Ao alocar o palete na estrutura física, o operador seleciona o endereço diretamente no mapa de estoque (grid clicável), sem digitar o código (ex: `001-02-A-20-01`).
 3. `[INVARIANTE]` O Django ORM deve validar atômicamente se a ocupação do endereço selecionado é menor que 21. Se o endereço já possuir 21 paletes, a operação é rejeitada em tela e o operador é instruído a buscar outra posição.
-4. Ao final da tarefa, o Gestor confere o relatório de divergências Planejado × Executado e digita sua senha de acesso para autorizar. A confirmação grava o estado e aciona a sincronização definitiva de localização no ERP.
+4. Ao final da tarefa, o Gestor confere os paletes armazenados e digita sua senha de acesso para autorizar. A confirmação grava o estado e aciona a sincronização definitiva de localização no ERP.
 
 ---
 
@@ -89,8 +89,8 @@ O controle de acessos será gerenciado nativamente pelo sistema de permissões d
 
 ### Milestone 2: Carga Inicial de Endereços
 * Criação de um comando personalizado do Django (`python manage.py gerar_estrutura_armazem`).
-* O comando deve popular a tabela de endereços criando a matriz exata de 60 posições (Corredores 01 a 20 combinados aos andares A, B e C), todos iniciando com `capacidade=21` e `ocupacao_atual=0`.
-* **Critério de Aceite:** Verificação via banco de dados confirmando a existência exata de 60 registros únicos seguindo o padrão `CC-A`.
+* O comando deve popular a tabela de endereços criando a matriz exata de 120 posições (Guardas 01 a 20 combinadas aos andares A, B e C e aos lados 01/02), todos iniciando com `capacidade=21` e `ocupacao_atual=0`.
+* **Critério de Aceite:** Verificação via banco de dados confirmando a existência exata de 120 registros únicos seguindo o padrão `001-LL-A-GG-01`.
 
 ### Milestone 3: Módulo de Entrada & Comunicação Socket ZPL
 * Criação das Views de recebimento e mapeamento do modelo de Palete no Django ORM.
@@ -114,9 +114,10 @@ from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator, MaxValueValidator
 
 class Endereco(models.Model):
-    corredor = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(20)])
+    guarda = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(20)])
+    lado = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(2)])
     andar = models.CharField(max_length=1, choices=[('A', 'Andar A'), ('B', 'Andar B'), ('C', 'Andar C')])
-    codigo = models.CharField(max_length=10, unique=True) # Ex: "02-B"
+    codigo = models.CharField(max_length=14, unique=True) # Ex: "001-01-A-04-01" — "001"/"01" fixos
     capacidade = models.IntegerField(default=21)
     ocupacao_atual = models.IntegerField(default=0)
     ativo = models.BooleanField(default=True)
@@ -128,7 +129,6 @@ class Palete(models.Model):
     STATUS_CHOICES = [
         ('CRIADO', 'Criado na Produção'),
         ('CONFERIDO', 'Conferido pela Logística'),
-        ('DIVERGENTE', 'Divergência de Peso'),
         ('ARMAZENADO', 'Armazenado no Endereço'),
         ('FINALIZADO', 'Movimentação Sincronizada no SAP'),
     ]

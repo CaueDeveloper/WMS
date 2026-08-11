@@ -1,10 +1,10 @@
 {% extends 'base.html' %}
 
-{% block title %}Relatório de Divergências{% endblock %}
+{% block title %}Confirmar Armazenagem{% endblock %}
 
 {% block content %}
 <div class="topbar">
-    <strong>Relatório de Divergências</strong>
+    <strong>Confirmar Armazenagem</strong>
     <a href="{% url 'home' %}">Início</a>
 </div>
 <div class="container">
@@ -16,6 +16,21 @@
 
     {% if paletes %}
         <ul>{% for p in paletes %}<li>{{ p.barcode_palete }} — SKU {{ p.sku }} — Lote {{ p.lote }} — Endereço {{ p.endereco.codigo }}</li>{% endfor %}</ul>
+        {% if paletes.paginator.num_pages > 1 %}
+        <div class="paginacao">
+            {% if paletes.has_previous %}
+                <a class="btn" href="?page={{ paletes.previous_page_number }}">« Anterior</a>
+            {% else %}
+                <span class="btn-disabled">« Anterior</span>
+            {% endif %}
+            <span class="pagina-atual">Página {{ paletes.number }} de {{ paletes.paginator.num_pages }}</span>
+            {% if paletes.has_next %}
+                <a class="btn" href="?page={{ paletes.next_page_number }}">Próxima »</a>
+            {% else %}
+                <span class="btn-disabled">Próxima »</span>
+            {% endif %}
+        </div>
+        {% endif %}
     {% else %}
         <p>Nenhum palete armazenado aguardando confirmação.</p>
     {% endif %}

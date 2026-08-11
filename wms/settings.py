@@ -10,22 +10,58 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
+import sys
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def _carregar_dotenv(caminho):
+    """Loader caseiro de .env (KEY=VALUE por linha), sem dependência externa —
+    mesmo padrão do projeto de preferir stdlib (ver apps/recebimento/whatsapp.py).
+    setdefault garante que uma env var real (systemd/CI/container) sempre tem
+    prioridade sobre o arquivo .env local."""
+    if not caminho.exists():
+        return
+    for linha in caminho.read_text(encoding='utf-8').splitlines():
+        linha = linha.strip()
+        if not linha or linha.startswith('#') or '=' not in linha:
+            continue
+        chave, _, valor = linha.partition('=')
+        os.environ.setdefault(chave.strip(), valor.strip().strip('"').strip("'"))
+
+
+_carregar_dotenv(BASE_DIR / '.env')
+
+
+def _bool_env(nome, default):
+    valor = os.environ.get(nome)
+    if valor is None:
+        return default
+    return valor.strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-3xl$+n&bxaysguow1+_n!svtccos77b&%@$ynwkabpvga=1%c$'
+# Valor abaixo é só o fallback de dev (preservado para não quebrar quem roda
+# sem configurar .env) — defina DJANGO_SECRET_KEY em produção.
+SECRET_KEY = os.environ.get(
+    'DJANGO_SECRET_KEY', 'django-insecure-3xl$+n&bxaysguow1+_n!svtccos77b&%@$ynwkabpvga=1%c$'
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = _bool_env('DJANGO_DEBUG', True)
 
-ALLOWED_HOSTS = []
+# [ASSUMPTION] IP da máquina de desenvolvimento na rede interna, para permitir
+# acesso de coletores físicos (Zebra) durante testes. Muda se a máquina
+# reconectar à rede (DHCP) — ajustar conforme `ipconfig`. 'localhost'/'127.0.0.1'
+# precisam estar explícitos aqui porque o Django só os libera automaticamente
+# quando ALLOWED_HOSTS está vazio.
+ALLOWED_HOSTS = ['10.61.1.193', 'localhost', '127.0.0.1']
 
 
 # Application definition
@@ -77,8 +113,24 @@ LOGOUT_REDIRECT_URL = 'login'
 
 # D5: impressora térmica Zebra ZT421, RAW ZPL via socket TCP/IP na porta 9100.
 # [ASSUMPTION] host de desenvolvimento provisório até existir um cadastro de equipamentos.
-IMPRESSORA_ZPL_HOST = 'localhost'
-IMPRESSORA_ZPL_PORT = 9100
+# Valores hardcoded abaixo são só o fallback de dev — configuráveis via .env (ver .env.example).
+IMPRESSORA_ZPL_HOST = os.environ.get('IMPRESSORA_ZPL_HOST', '10.61.1.19')
+IMPRESSORA_ZPL_PORT = int(os.environ.get('IMPRESSORA_ZPL_PORT', '9100'))
+
+# D8: Z-API (WhatsApp Business API) — notifica o Gestor de Logística por WhatsApp
+# quando um lote é aprovado, substituindo o aviso manual hoje feito por grupos de
+# WhatsApp (ver docs/PRD.md linha 27).
+# [ASSUMPTION] credenciais e número de destino são placeholders de desenvolvimento até
+# existir conta Z-API contratada e o número real do Gestor de logística.
+# Valores hardcoded abaixo são só o fallback de dev — configuráveis via .env (ver .env.example).
+ZAPI_INSTANCE_ID = os.environ.get('ZAPI_INSTANCE_ID', '3DE71D53DC14B00B4C2E8E66062CE0C1')
+ZAPI_TOKEN = os.environ.get('ZAPI_TOKEN', '7636AD593B1A24783FB16794')
+# Header "Client-Token" (segurança de conta Z-API, distinto do token da URL acima) —
+# sem valor de dev conhecido; precisa ser definido via .env para a notificação funcionar de fato.
+ZAPI_CLIENT_TOKEN = os.environ.get('ZAPI_CLIENT_TOKEN', '')
+ZAPI_LOGISTICA_WHATSAPP_NUMBER = os.environ.get(
+    'ZAPI_LOGISTICA_WHATSAPP_NUMBER', '5562991926068'
+)  # DDI+DDD+número, sem símbolos
 
 
 # Database
@@ -110,13 +162,18 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Hasher de senha rápido em modo teste — PBKDF2 real (~5s por chamada) torna a
+# suíte completa impraticável dado o volume de create_user/client.login/check_password.
+if 'test' in sys.argv:
+    PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'America/Sao_Paulo'
 
 USE_I18N = True
 

@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+
+{% block title %}Transferência — WMS{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <strong>Transferência</strong>
+    <a href="{% url 'home' %}">Início</a>
+</div>
+<div class="container">
+    <h1>Bipagem de Transferência</h1>
+
+    {% for mensagem in messages %}
+        <p class="{% if mensagem.tags == 'error' %}erro{% else %}ok{% endif %}">{{ mensagem }}</p>
+    {% endfor %}
+
+    <form method="post" autocomplete="off">
+        {% csrf_token %}
+        <label for="id_barcode_palete">Bipe o palete para transferência</label>
+        <input type="text" name="barcode_palete" id="id_barcode_palete" autofocus autocomplete="off" required>
+        <button type="submit">Bipar</button>
+    </form>
+
+    <h2>Lotes Aguardando Aprovação</h2>
+    {% if not grupos %}
+        <p>Nenhum lote aguardando aprovação.</p>
+    {% else %}
+        <form method="post">
+            {% csrf_token %}
+            <button type="submit" name="aprovar_pendentes" value="1">
+                Aprovar Todos os Lotes Pendentes ({{ total_grupos }})
+            </button>
+        </form>
+    {% endif %}
+
+    {% for grupo in grupos %}
+        <div class="cartao">
+            <p><strong>{{ grupo.lote }}</strong> — {{ grupo.sku }}</p>
+            <p>{{ grupo.quantidade }} palete(s) — {{ grupo.peso_total }} kg</p>
+            <details>
+                <summary>Ver barcodes</summary>
+                <ul>
+                    {% for p in grupo.paletes %}<li>{{ p.barcode_palete }}</li>{% endfor %}
+                </ul>
+            </details>
+        </div>
+    {% endfor %}
+
+    {% if grupos.paginator.num_pages > 1 %}
+    <div class="paginacao">
+        {% if grupos.has_previous %}
+            <a class="btn" href="?page={{ grupos.previous_page_number }}">« Anterior</a>
+        {% else %}
+            <span class="btn-disabled">« Anterior</span>
+        {% endif %}
+        <span class="pagina-atual">Página {{ grupos.number }} de {{ grupos.paginator.num_pages }}</span>
+        {% if grupos.has_next %}
+            <a class="btn" href="?page={{ grupos.next_page_number }}">Próxima »</a>
+        {% else %}
+            <span class="btn-disabled">Próxima »</span>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

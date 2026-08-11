@@ -1,11 +1,14 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.shortcuts import redirect, render
 
 from apps.recebimento.models import Palete
 
 from .decorators import group_required
 from .forms import ReautenticacaoForm
+
+ITENS_POR_PAGINA_CONFIRMACAO = 20
 
 
 @login_required
@@ -14,7 +17,9 @@ def home(request):
 
 
 @group_required('Gestores')
-def relatorio_divergencias(request):
+def confirmar_armazenagem(request):
+    # Sempre a queryset completa (não paginada) — o .update() abaixo precisa afetar
+    # todos os paletes ARMAZENADO, nunca só a página exibida no GET.
     paletes_armazenados = Palete.objects.filter(estado='ARMAZENADO').select_related('endereco').order_by('endereco__codigo')
 
     if request.method == 'POST':
@@ -25,12 +30,14 @@ def relatorio_divergencias(request):
                 request,
                 f'{atualizados} palete(s) confirmado(s) e sincronizado(s) com o SAP B1.',
             )
-            return redirect('relatorio_divergencias')
+            return redirect('confirmar_armazenagem')
         messages.error(request, 'Senha inválida. Autorização não concedida.')
     else:
         form = ReautenticacaoForm()
 
-    return render(request, 'core/relatorio_divergencias.html', {
+    pagina_paletes = Paginator(paletes_armazenados, ITENS_POR_PAGINA_CONFIRMACAO).get_page(request.GET.get('page'))
+
+    return render(request, 'core/confirmar_armazenagem.html', {
         'form': form,
-        'paletes': paletes_armazenados,
+        'paletes': pagina_paletes,
     })

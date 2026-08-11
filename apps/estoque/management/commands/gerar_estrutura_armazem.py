@@ -2,36 +2,39 @@ from django.core.management.base import BaseCommand
 
 from apps.estoque.models import Endereco
 
-CORREDORES = range(1, 21)
+GUARDAS = range(1, 21)
 ANDARES = ['A', 'B', 'C']
+LADOS = [1, 2]
 
 
 class Command(BaseCommand):
     help = (
-        'Popula a matriz fixa de endereços do armazém: 20 corredores x 3 andares '
-        '(60 posições, código "CC-A", capacidade=21).'
+        'Popula a matriz fixa de endereços do armazém: 20 guardas x 3 andares x 2 lados '
+        '(120 posições, código "001-LL-A-GG-01", capacidade=21).'
     )
 
     def handle(self, *args, **options):
         criados = 0
         existentes = 0
 
-        for corredor in CORREDORES:
-            for andar in ANDARES:
-                codigo = f'{corredor:02d}-{andar}'
-                _, criado = Endereco.objects.get_or_create(
-                    codigo=codigo,
-                    defaults={
-                        'corredor': corredor,
-                        'andar': andar,
-                        'capacidade': 21,
-                        'ocupacao_atual': 0,
-                    },
-                )
-                if criado:
-                    criados += 1
-                else:
-                    existentes += 1
+        for lado in LADOS:
+            for guarda in GUARDAS:
+                for andar in ANDARES:
+                    codigo = Endereco.montar_codigo(lado=lado, andar=andar, guarda=guarda)
+                    _, criado = Endereco.objects.get_or_create(
+                        codigo=codigo,
+                        defaults={
+                            'guarda': guarda,
+                            'andar': andar,
+                            'lado': lado,
+                            'capacidade': 21,
+                            'ocupacao_atual': 0,
+                        },
+                    )
+                    if criado:
+                        criados += 1
+                    else:
+                        existentes += 1
 
         self.stdout.write(self.style.SUCCESS(
             f'Estrutura de armazém: {criados} endereço(s) criado(s), '
