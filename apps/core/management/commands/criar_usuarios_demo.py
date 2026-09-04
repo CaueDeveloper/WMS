@@ -2,15 +2,19 @@ from django.contrib.auth.models import Group, User
 from django.core.management.base import BaseCommand
 
 USUARIOS_DEMO = [
-    ('gestor', 'Gestor@123', 'Gestores'),
-    ('operador', 'Operador@123', 'Operadores'),
+    ('admin_demo', 'AdminDemo@123', 'Administradores'),
+    ('operador_producao', 'OperadorProducao@123', 'Operador Produção'),
+    ('operador_logistica', 'OperadorLogistica@123', 'Operador Logística'),
+    ('gestor_producao', 'GestorProducao@123', 'Gestor Produção'),
+    ('gestor_logistica', 'GestorLogistica@123', 'Gestor Logística'),
 ]
 
 
 class Command(BaseCommand):
     help = (
-        'Cria (ou reseta a senha de) usuários de demonstração para acessar o sistema: '
-        '"gestor" (grupo Gestores) e "operador" (grupo Operadores).'
+        'Cria (ou reseta a senha de) usuários de demonstração para acessar o sistema, '
+        'um por papel: "admin_demo", "operador_producao", "operador_logistica", '
+        '"gestor_producao", "gestor_logistica".'
     )
 
     def handle(self, *args, **options):

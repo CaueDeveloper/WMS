@@ -46,22 +46,29 @@ def _bool_env(nome, default):
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-# Valor abaixo é só o fallback de dev (preservado para não quebrar quem roda
-# sem configurar .env) — defina DJANGO_SECRET_KEY em produção.
-SECRET_KEY = os.environ.get(
-    'DJANGO_SECRET_KEY', 'django-insecure-3xl$+n&bxaysguow1+_n!svtccos77b&%@$ynwkabpvga=1%c$'
-)
-
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = _bool_env('DJANGO_DEBUG', True)
+DEBUG = _bool_env('DJANGO_DEBUG', False)
 
-# [ASSUMPTION] IP da máquina de desenvolvimento na rede interna, para permitir
-# acesso de coletores físicos (Zebra) durante testes. Muda se a máquina
-# reconectar à rede (DHCP) — ajustar conforme `ipconfig`. 'localhost'/'127.0.0.1'
-# precisam estar explícitos aqui porque o Django só os libera automaticamente
-# quando ALLOWED_HOSTS está vazio.
-ALLOWED_HOSTS = ['10.61.1.193', 'localhost', '127.0.0.1']
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+if not SECRET_KEY:
+    if DEBUG:
+        # Fallback só para rodar localmente sem configurar .env — nunca usar em produção.
+        SECRET_KEY = 'django-insecure-dev-only-fallback-key-do-not-use-in-production'
+    else:
+        raise RuntimeError(
+            'DJANGO_SECRET_KEY não configurada. Defina essa variável de ambiente '
+            '(ou no .env) antes de rodar com DJANGO_DEBUG=False.'
+        )
+
+# [ASSUMPTION] fallback abaixo é o IP da máquina de desenvolvimento na rede interna
+# (Zebra/coletores) — em produção, defina DJANGO_ALLOWED_HOSTS no .env (lista
+# separada por vírgula, ex.: "10.61.1.10,wms.cafedositio.local").
+_allowed_hosts_env = os.environ.get('DJANGO_ALLOWED_HOSTS')
+if _allowed_hosts_env:
+    ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()]
+else:
+    ALLOWED_HOSTS = ['10.61.1.193', 'localhost', '127.0.0.1']
 
 
 # Application definition
@@ -80,6 +87,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -133,15 +141,77 @@ ZAPI_LOGISTICA_WHATSAPP_NUMBER = os.environ.get(
 )  # DDI+DDD+número, sem símbolos
 
 
+# LDAP/Active Directory — autenticação corporativa via django-auth-ldap.
+# [ASSUMPTION] sem servidor LDAP real disponível em desenvolvimento: todas as
+# variáveis abaixo são placeholders vazios até alguém com acesso ao AD
+# preencher o .env (ver .env.example). python-ldap (dependência C de
+# django-auth-ldap) não tem wheel oficial pra Windows — o import é protegido
+# para que o projeto continue rodando via ModelBackend (usuários locais/demo)
+# mesmo sem o pacote instalado nesta máquina.
+try:
+    import ldap
+    from django_auth_ldap.config import GroupOfNamesType, LDAPSearch
+    _LDAP_DISPONIVEL = True
+except ImportError:
+    _LDAP_DISPONIVEL = False
+
+AUTHENTICATION_BACKENDS = ['django.contrib.auth.backends.ModelBackend']
+
+if _LDAP_DISPONIVEL:
+    AUTH_LDAP_SERVER_URI = os.environ.get('AUTH_LDAP_SERVER_URI', '')
+    AUTH_LDAP_BIND_DN = os.environ.get('AUTH_LDAP_BIND_DN', '')
+    AUTH_LDAP_BIND_PASSWORD = os.environ.get('AUTH_LDAP_BIND_PASSWORD', '')
+
+    _ldap_user_search_base = os.environ.get('AUTH_LDAP_USER_SEARCH_BASE', '')
+    _ldap_group_search_base = os.environ.get('AUTH_LDAP_GROUP_SEARCH_BASE', '')
+
+    if AUTH_LDAP_SERVER_URI and _ldap_user_search_base and _ldap_group_search_base:
+        AUTH_LDAP_USER_SEARCH = LDAPSearch(
+            _ldap_user_search_base, ldap.SCOPE_SUBTREE, '(sAMAccountName=%(user)s)',
+        )
+        AUTH_LDAP_GROUP_SEARCH = LDAPSearch(
+            _ldap_group_search_base, ldap.SCOPE_SUBTREE, '(objectClass=group)',
+        )
+        AUTH_LDAP_GROUP_TYPE = GroupOfNamesType()
+        # AUTH_LDAP_MIRROR_GROUPS cria/sincroniza os grupos Django a cada login
+        # LDAP com base no atributo `cn` do grupo AD — o `cn` real no AD precisa
+        # bater com os 5 nomes de apps/core/migrations/0002_migrar_grupos_por_setor.py,
+        # senão será necessário um passo de mapeamento adicional (TODO futuro,
+        # dependente dos nomes reais de grupo do AD, ainda desconhecidos).
+        AUTH_LDAP_MIRROR_GROUPS = True
+        AUTH_LDAP_FIND_GROUP_PERMS = True
+
+        AUTHENTICATION_BACKENDS = [
+            'django_auth_ldap.backend.LDAPBackend',
+            'django.contrib.auth.backends.ModelBackend',
+        ]
+
+
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
+# Produção usa MySQL (ver requirements-prod.txt) configurado via .env; sem
+# DJANGO_DB_NAME definida, cai no SQLite de desenvolvimento de sempre.
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+_db_name = os.environ.get('DJANGO_DB_NAME')
+if _db_name:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': _db_name,
+            'USER': os.environ.get('DJANGO_DB_USER', ''),
+            'PASSWORD': os.environ.get('DJANGO_DB_PASSWORD', ''),
+            'HOST': os.environ.get('DJANGO_DB_HOST', 'localhost'),
+            'PORT': os.environ.get('DJANGO_DB_PORT', '3306'),
+            'OPTIONS': {'charset': 'utf8mb4'},
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
@@ -184,3 +254,29 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
+
+
+# Segurança adicional para produção (DEBUG=False). Tráfego do WMS é interno
+# (LAN do armazém), então HSTS/SSL redirect ficam desligados por padrão — ativar
+# via DJANGO_SECURE_SSL_REDIRECT=True se um dia houver HTTPS na frente (Nginx/IIS).
+if not DEBUG:
+    _csrf_trusted = os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '')
+    CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_trusted.split(',') if o.strip()]
+
+    SECURE_SSL_REDIRECT = _bool_env('DJANGO_SECURE_SSL_REDIRECT', False)
+    SESSION_COOKIE_SECURE = _bool_env('DJANGO_SECURE_SSL_REDIRECT', False)
+    CSRF_COOKIE_SECURE = _bool_env('DJANGO_SECURE_SSL_REDIRECT', False)
+    SECURE_HSTS_SECONDS = 3600 if SECURE_SSL_REDIRECT else 0
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_SSL_REDIRECT
+    SECURE_HSTS_PRELOAD = SECURE_SSL_REDIRECT
+    X_FRAME_OPTIONS = 'DENY'

@@ -1,2 +1,4 @@
 -r requirements.txt
 mysqlclient>=2.2,<3.0
+waitress>=3.0,<4.0
+whitenoise>=6.7,<7.0

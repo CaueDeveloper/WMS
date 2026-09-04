@@ -8,7 +8,7 @@
     <a href="{% url 'home' %}">Início</a>
 </div>
 <div class="container">
-    <h1>Conferência de Entrada</h1>
+    <h1>Emissão da Etiqueta</h1>
 
     {% for mensagem in messages %}
         <p class="{% if mensagem.tags == 'error' %}erro{% else %}ok{% endif %}">{{ mensagem }}</p>
@@ -17,11 +17,35 @@
     <form method="post">
         {% csrf_token %}
         {% for campo in form %}
-            <label for="{{ campo.id_for_label }}">{{ campo.label }}</label>
-            {{ campo }}
-            {% for erro in campo.errors %}<p class="erro">{{ erro }}</p>{% endfor %}
+            <div id="linha-{{ campo.name }}">
+                <label for="{{ campo.id_for_label }}">{{ campo.label }}</label>
+                {{ campo }}
+                {% for erro in campo.errors %}<p class="erro">{{ erro }}</p>{% endfor %}
+            </div>
         {% endfor %}
-        <button type="submit">Confirmar Palete</button>
+        <button type="submit">Emitir Etiqueta</button>
     </form>
 </div>
+
+<script>
+(function () {
+    var idsPesoVariavel = [{{ produtos_peso_variavel_ids|join:"," }}];
+    var selectProduto = document.getElementById('id_produto');
+    var linhaPeso = document.getElementById('linha-peso_kg');
+    var campoPeso = document.getElementById('id_peso_kg');
+
+    function atualizarCampoPeso() {
+        var produtoId = parseInt(selectProduto.value, 10);
+        var pesoVariavel = idsPesoVariavel.indexOf(produtoId) !== -1;
+        linhaPeso.style.display = pesoVariavel ? '' : 'none';
+        campoPeso.required = pesoVariavel;
+        if (!pesoVariavel) {
+            campoPeso.value = '';
+        }
+    }
+
+    selectProduto.addEventListener('change', atualizarCampoPeso);
+    atualizarCampoPeso();
+})();
+</script>
 {% endblock %}

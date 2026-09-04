@@ -11,9 +11,9 @@ logger = logging.getLogger(__name__)
 
 def montar_mensagem_lotes(aprovados):
     """Monta o texto de uma única notificação WhatsApp cobrindo todos os lotes
-    aprovados numa mesma ação do Gestor. `aprovados`: list[(lote, paletes)], no
-    formato retornado por services.aprovar_lotes_pendentes. Não menciona área de
-    destino — essa atribuição foi adiada para uma etapa futura fora deste fluxo."""
+    aprovados numa mesma ação do Gestor. `aprovados`: list[(lote, paletes)]. Não
+    menciona área de destino — essa atribuição foi adiada para uma etapa futura
+    fora deste fluxo."""
     aprovados = list(aprovados)
     total_paletes = sum(len(paletes) for _, paletes in aprovados)
     total_peso = sum(p.peso_kg for _, paletes in aprovados for p in paletes)

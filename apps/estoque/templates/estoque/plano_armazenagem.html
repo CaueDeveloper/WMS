@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+
+{% block title %}Plano de Armazenagem — WMS{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <strong>Plano de Armazenagem</strong>
+    <a href="{% url 'home' %}">Início</a>
+</div>
+<div class="container-amplo">
+
+    {% for mensagem in messages %}
+        <p class="{% if mensagem.tags == 'error' %}erro{% else %}ok{% endif %}">{{ mensagem }}</p>
+    {% endfor %}
+
+    <form method="get" autocomplete="off">
+        <label for="id_barcode_palete">Barcode</label>
+        <input type="text" name="barcode_palete" id="id_barcode_palete" value="{{ barcode_palete }}" autofocus autocomplete="off" required>
+        <button type="submit">Buscar</button>
+    </form>
+
+    {% if grupo %}
+        <div class="legenda">
+            <span><span class="amostra nivel-vazio"></span> Vazio</span>
+            <span><span class="amostra nivel-baixo"></span> &lt; 30%</span>
+            <span><span class="amostra nivel-medio"></span> 30–69%</span>
+            <span><span class="amostra nivel-alto"></span> 70–99%</span>
+            <span><span class="amostra nivel-cheio"></span> Cheio (100%)</span>
+            <span><span class="amostra inicio-caminho"></span> ● Início do trajeto</span>
+            <span><span class="amostra no-caminho"></span> Caminho até o destino</span>
+            <span><span class="amostra destino-caminho"></span> ★ Endereço de destino</span>
+        </div>
+        <div class="cartao">
+            <p><strong>{{ grupo.paletes.0.barcode_palete }}</strong></p>
+            <p>SKU: {{ grupo.paletes.0.sku }} — Lote: {{ grupo.paletes.0.lote }}</p>
+            <p>{{ grupo.paletes.0.descricao }} — {{ grupo.peso_total }} kg</p>
+            <p>Endereço: <strong>{{ grupo.endereco.codigo }}</strong></p>
+        </div>
+
+        <div class="resumo-rota">
+            <div class="resumo-rota-ponto">
+                <span class="resumo-rota-marcador inicio" aria-hidden="true">●</span>
+                <div>
+                    <div class="rotulo">Início</div>
+                    <div class="valor">Módulo 01 — Andar {{ grupo.endereco.andar }}</div>
+                </div>
+            </div>
+            <div class="resumo-rota-trajeto" aria-hidden="true">
+                <span class="seta-grande">→</span>
+                <small>{{ grupo.endereco.modulo }} módulo(s)</small>
+            </div>
+            <div class="resumo-rota-ponto">
+                <span class="resumo-rota-marcador destino" aria-hidden="true">★</span>
+                <div>
+                    <div class="rotulo">Destino</div>
+                    <div class="valor">{{ grupo.endereco.codigo }}</div>
+                </div>
+            </div>
+        </div>
+        <p class="resumo-rota-texto">
+            Empilhador: siga o Andar {{ grupo.endereco.andar }}, módulo a módulo, do módulo 01 até o
+            módulo {{ grupo.endereco.modulo|stringformat:"02d" }} — trajeto destacado em verde na grade
+            abaixo, terminando no endereço em vermelho.
+        </p>
+        <h3 class="titulo-grade">Módulo 01 → {{ grupo.endereco.codigo }}</h3>
+        {% include 'estoque/_grade_enderecos.html' with grade=grupo.grade %}
+    {% endif %}
+</div>
+{% endblock %}

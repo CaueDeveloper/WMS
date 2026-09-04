@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titulo }} — WMS{% endblock %}
+
+{% block extra_head %}
+<style>
+    @media print {
+        .topbar, .no-imprimir { display: none; }
+        body { background: #fff; }
+    }
+    .relatorio-cabecalho {
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 24px;
+    }
+    table.tabela-relatorio {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 32px;
+    }
+    table.tabela-relatorio th, table.tabela-relatorio td {
+        border: 1px solid var(--cor-borda);
+        padding: 8px 10px;
+        text-align: left;
+        font-size: var(--fs-amplo-tabela);
+    }
+    table.tabela-relatorio th {
+        background: var(--cor-primaria);
+        color: #fff;
+    }
+    .assinatura-linha {
+        border-top: 1px solid #000;
+        width: 320px;
+        margin-top: 70px;
+        padding-top: 6px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <strong>{{ titulo }}</strong>
+    <a href="{% url 'home' %}">Início</a>
+</div>
+<div class="container-amplo">
+    <button type="button" class="no-imprimir" onclick="window.print()">Imprimir / Salvar PDF</button>
+
+    <div class="relatorio-cabecalho">
+        <div>
+            <p><strong>Gestor:</strong> {{ gestor.username }}</p>
+            <p><strong>Data de aprovação:</strong> {{ aprovado_em|date:'d/m/Y H:i' }}</p>
+        </div>
+        <div>
+            <p><strong>Data de emissão:</strong> {{ emitido_em|date:'d/m/Y H:i' }}</p>
+        </div>
+    </div>
+
+    {% if grupos %}
+    <table class="tabela-relatorio">
+        <thead>
+            <tr>
+                <th>Produto</th>
+                <th>SKU</th>
+                <th>Lote</th>
+                <th>Qtd. Paletes</th>
+                <th>Peso Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for grupo in grupos %}
+            <tr>
+                <td>{{ grupo.descricao }}</td>
+                <td>{{ grupo.sku }}</td>
+                <td>{{ grupo.lote }}</td>
+                <td>{{ grupo.quantidade }}</td>
+                <td>{{ grupo.peso_total }} kg</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="erro">Nenhum lote aprovado encontrado para os dados informados.</p>
+    {% endif %}
+
+    <div class="assinatura-linha">Assinatura do Gestor</div>
+</div>
+{% endblock %}

@@ -3,7 +3,10 @@ __pycache__/
 *.pyc
 db.sqlite3
 .env
+.env.example
 *.log
 staticfiles/
 media/
 .vscode/
+manage.py
+CLAUDE.md

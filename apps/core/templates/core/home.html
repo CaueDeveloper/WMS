@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load core_extras %}
 
 {% block title %}Início — WMS{% endblock %}
 
@@ -13,10 +14,34 @@
 <div class="container">
     <h1>Bem-vindo, {{ user.username }}</h1>
     <p>Grupos: {% for g in user.groups.all %}{{ g.name }}{% if not forloop.last %}, {% endif %}{% empty %}Nenhum{% endfor %}</p>
+
+    {% if user|em_algum_grupo:"Administradores,Operador Produção" %}
     <p><a class="btn" href="{% url 'recebimento:novo' %}">Produção</a></p>
+    {% endif %}
+
+    {% if user|em_algum_grupo:"Administradores,Operador Produção,Gestor Produção" %}
     <p><a class="btn" href="{% url 'recebimento:transferencia_gestor' %}">Transferência: Produção</a></p>
-    <p><a class="btn" href="{% url 'estoque:putaway' %}">Transferência: Logística</a></p>
+    {% endif %}
+
+    {% if user|em_algum_grupo:"Administradores,Operador Logística,Gestor Logística" %}
+    <p><a class="btn" href="{% url 'recebimento:transferencia_logistica' %}">Transferência: Logística</a></p>
+    {% endif %}
+
+    {% if user|em_algum_grupo:"Administradores,Operador Logística" %}
+    <p><a class="btn" href="{% url 'estoque:putaway' %}">Armazenagem</a></p>
+    <p><a class="btn" href="{% url 'estoque:plano_armazenagem' %}">Plano de Armazenagem</a></p>
+    {% endif %}
+
+    {% if user|em_algum_grupo:"Administradores,Gestor Produção,Gestor Logística" %}
     <p><a class="btn" href="{% url 'estoque:mapa_estoque' %}">Mapa de Estoque</a></p>
-    <p><a class="btn" href="{% url 'estoque:consultar_palete' %}">Consultar Palete</a></p>
+    {% endif %}
+
+    {% if user|em_algum_grupo:"Administradores,Operador Produção,Operador Logística,Gestor Produção,Gestor Logística" %}
+    <p><a class="btn" href="{% url 'estoque:consultar_palete' %}">Consultar</a></p>
+    {% endif %}
+
+    {% if user|em_algum_grupo:"Administradores,Gestor Produção,Gestor Logística" %}
+    <p><a class="btn" href="{% url 'estatisticas' %}">Estatísticas</a></p>
+    {% endif %}
 </div>
 {% endblock %}

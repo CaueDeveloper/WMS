@@ -139,7 +139,7 @@ Por padrão o servidor só aceita conexões vindas da própria máquina (`localh
 5. **No coletor**, configure o perfil do Zebra DataWedge em modo *Keystroke/HID output* apontando para o navegador, e acesse `http://<IP-da-máquina>:8000/` (ex.: `http://10.61.1.193:8000/`).
 6. **Faça login** com um dos usuários de demonstração (`operador` / `Operador@123` ou `gestor` / `Gestor@123`).
 
-> ⚠️ O campo **Produto** na tela de recebimento (`/recebimento/receber/`) é um menu suspenso (`<select>`), não um campo de texto — bipar um código de barras nele não funciona de forma confiável. O teste real de bipagem contínua vale para os campos de texto: **Sequencial**, **Peso** (na entrada) e **Código do Palete** / **Código do Endereço** (no put-away, `/estoque/putaway/`).
+> ⚠️ O campo **Produto** na tela de recebimento (`/recebimento/receber/`) é um menu suspenso (`<select>`), não um campo de texto — bipar um código de barras nele não funciona de forma confiável. O teste real de bipagem contínua vale para os campos de texto de outras telas (ex.: **Sequencial** na entrada). O Put-away (`/estoque/putaway/`) não usa mais bipagem — passou a ser operado por tablet/celular, com o número do lote digitado manualmente.
 
 ## 🔄 Fluxo de Trabalho
 
@@ -172,15 +172,15 @@ Quando todos os paletes do lote (mesmo SKU/dia) estiverem na fila, o Gestor **ap
 ### 3️⃣ Put-away (Gestor de Logística)
 
 **Rota:** `/estoque/putaway/`  
-**Permissão:** Nenhuma restrição de grupo — aberta a qualquer usuário autenticado; na prática, é o Gestor de Logística que recebe a notificação quem bipa fisicamente
+**Permissão:** Nenhuma restrição de grupo — aberta a qualquer usuário autenticado; operada por tablet/celular (não usa o coletor Zebra)
 
-**Etapa A:** Bipador lê o barcode do palete  
-→ Sistema mostra SKU/descrição/lote/peso/área de destino
+**Etapa A:** Gestor digita o número do lote (ou clica em "Armazenar" na lista de lotes pendentes)  
+→ Sistema mostra SKU/descrição/quantidade de paletes/peso total do lote
 
-**Etapa B:** Gestor de Logística bipa/digita o código do endereço  
-→ Sistema aloca o palete (ou rejeita se endereço cheio)
+**Etapa B:** Gestor clica no endereço disponível na grade  
+→ Sistema aloca **todos os paletes do lote de uma vez** naquele endereço (tudo ou nada; rejeita se não houver vagas suficientes)
 
-**Resultado:** Palete em estado `ARMAZENADO`
+**Resultado:** Todos os paletes do lote em estado `ARMAZENADO`
 
 ### 4️⃣ Confirmação Final (Gestor)
 

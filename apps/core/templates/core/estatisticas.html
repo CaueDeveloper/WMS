@@ -1,0 +1,210 @@
+{% extends 'base.html' %}
+
+{% block title %}Estatísticas — WMS{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <strong>Estatísticas</strong>
+    <a href="{% url 'home' %}">Início</a>
+</div>
+<div class="container-amplo pagina-estatisticas">
+    <h1>Estatísticas do WMS</h1>
+
+    <form method="get" id="form-filtros-estatisticas" onsubmit="return false;">
+        <section class="secao-estatistica">
+            <h2>Paletes Criados</h2>
+            <div class="filtro-periodo">
+                <label for="criados_de">De</label>
+                <input type="date" id="criados_de" name="criados_de" value="{{ criados_de }}">
+                <label for="criados_ate">Até</label>
+                <input type="date" id="criados_ate" name="criados_ate" value="{{ criados_ate }}">
+                <label for="criados_sku">Produto</label>
+                <select id="criados_sku" name="criados_sku">
+                    <option value="">Todos</option>
+                    {% for produto in produtos_disponiveis %}
+                    <option value="{{ produto.sku }}" {% if produto.sku == criados_sku %}selected{% endif %}>{{ produto.sku }} — {{ produto.descricao }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </section>
+
+        {% if pode_ver_producao %}
+        <section class="secao-estatistica">
+            <h2>Lotes Aprovados — Transferência da Produção</h2>
+            <div class="filtro-periodo">
+                <label for="producao_de">De</label>
+                <input type="date" id="producao_de" name="producao_de" value="{{ producao_de }}">
+                <label for="producao_ate">Até</label>
+                <input type="date" id="producao_ate" name="producao_ate" value="{{ producao_ate }}">
+                <label for="producao_sku">Produto</label>
+                <select id="producao_sku" name="producao_sku">
+                    <option value="">Todos</option>
+                    {% for produto in produtos_disponiveis %}
+                    <option value="{{ produto.sku }}" {% if produto.sku == producao_sku %}selected{% endif %}>{{ produto.sku }} — {{ produto.descricao }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </section>
+        {% endif %}
+
+        {% if pode_ver_logistica %}
+        <section class="secao-estatistica">
+            <h2>Lotes Aprovados — Transferência da Logística</h2>
+            <div class="filtro-periodo">
+                <label for="logistica_de">De</label>
+                <input type="date" id="logistica_de" name="logistica_de" value="{{ logistica_de }}">
+                <label for="logistica_ate">Até</label>
+                <input type="date" id="logistica_ate" name="logistica_ate" value="{{ logistica_ate }}">
+                <label for="logistica_sku">Produto</label>
+                <select id="logistica_sku" name="logistica_sku">
+                    <option value="">Todos</option>
+                    {% for produto in produtos_disponiveis %}
+                    <option value="{{ produto.sku }}" {% if produto.sku == logistica_sku %}selected{% endif %}>{{ produto.sku }} — {{ produto.descricao }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </section>
+        {% endif %}
+    </form>
+
+    {% include 'core/_resultados_estatisticas.html' %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var graficos = {};
+
+    var PALETA_CORES = ['#1d4e45', '#ad3b2c', '#256359', '#d99a2b', '#5b4b8a', '#2b7fa6', '#8a5b2b', '#7a2b5b'];
+
+    function lerDados(id) {
+        var el = document.getElementById(id);
+        return el ? JSON.parse(el.textContent) : null;
+    }
+
+    function corParaIndice(indice) {
+        return PALETA_CORES[indice % PALETA_CORES.length];
+    }
+
+    function datasetsEmpilhadosPorSku(datasetsPorSku) {
+        return datasetsPorSku.map(function (dataset, indice) {
+            return {
+                label: dataset.sku,
+                data: dataset.valores,
+                backgroundColor: corParaIndice(indice),
+                stack: 'total',
+            };
+        });
+    }
+
+    function destruirGraficos() {
+        Object.keys(graficos).forEach(function (chave) {
+            if (graficos[chave]) {
+                graficos[chave].destroy();
+            }
+        });
+        graficos = {};
+    }
+
+    function desenharGraficos() {
+        var criados = lerDados('dados-grafico-criados');
+        if (criados) {
+            graficos.criados = new Chart(document.getElementById('grafico-criados'), {
+                type: 'bar',
+                data: {
+                    labels: criados.labels,
+                    datasets: datasetsEmpilhadosPorSku(criados.datasets),
+                },
+                options: {
+                    responsive: true,
+                    scales: { x: { stacked: true }, y: { stacked: true } },
+                },
+            });
+        }
+
+        var produto = lerDados('dados-grafico-produto');
+        if (produto) {
+            graficos.produtoQuantidade = new Chart(document.getElementById('grafico-produto-quantidade'), {
+                type: 'bar',
+                data: { labels: produto.labels, datasets: [{ label: 'Quantidade de paletes', data: produto.quantidades, backgroundColor: '#1d4e45' }] },
+                options: { responsive: true },
+            });
+            graficos.produtoPeso = new Chart(document.getElementById('grafico-produto-peso'), {
+                type: 'bar',
+                data: { labels: produto.labels, datasets: [{ label: 'Peso total (kg)', data: produto.pesos, backgroundColor: '#ad3b2c' }] },
+                options: { responsive: true },
+            });
+        }
+
+        var producao = lerDados('dados-grafico-producao');
+        if (producao) {
+            graficos.producao = new Chart(document.getElementById('grafico-producao'), {
+                type: 'bar',
+                data: {
+                    labels: producao.labels,
+                    datasets: datasetsEmpilhadosPorSku(producao.datasets),
+                },
+                options: {
+                    responsive: true,
+                    scales: { x: { stacked: true }, y: { stacked: true } },
+                },
+            });
+        }
+
+        var logistica = lerDados('dados-grafico-logistica');
+        if (logistica) {
+            graficos.logistica = new Chart(document.getElementById('grafico-logistica'), {
+                type: 'bar',
+                data: {
+                    labels: logistica.labels,
+                    datasets: datasetsEmpilhadosPorSku(logistica.datasets),
+                },
+                options: {
+                    responsive: true,
+                    scales: { x: { stacked: true }, y: { stacked: true } },
+                },
+            });
+        }
+    }
+
+    desenharGraficos();
+
+    var form = document.getElementById('form-filtros-estatisticas');
+    var resultados = document.getElementById('resultados-estatisticas');
+    var timeoutId = null;
+
+    function aplicarFiltros() {
+        var baseUrl = resultados.dataset.baseUrl;
+        var params = new URLSearchParams(new FormData(form));
+        var url = baseUrl + '?' + params.toString();
+
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (resposta) { return resposta.text(); })
+            .then(function (html) {
+                destruirGraficos();
+                resultados.outerHTML = html;
+                resultados = document.getElementById('resultados-estatisticas');
+                desenharGraficos();
+                window.history.replaceState(null, '', url);
+            })
+            .catch(function () {
+                form.submit();
+            });
+    }
+
+    form.addEventListener('change', function (evento) {
+        if (evento.target.matches('input[type="date"], select')) {
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
+            timeoutId = setTimeout(aplicarFiltros, 150);
+        }
+    });
+})();
+</script>
+{% endblock %}

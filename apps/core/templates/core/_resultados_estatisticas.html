@@ -1,0 +1,77 @@
+{% load static %}
+<div id="resultados-estatisticas" data-base-url="{{ request.path }}">
+    <section class="secao-estatistica">
+        <h2>Paletes Criados</h2>
+
+        <div class="resumo-estoque">
+            <div class="stat">
+                <div class="rotulo">Total de Paletes Criados</div>
+                <div class="valor">{{ total_paletes_criados }}</div>
+            </div>
+        </div>
+
+        {{ grafico_criados|json_script:"dados-grafico-criados" }}
+        <canvas id="grafico-criados"></canvas>
+
+        <h3>Por Produto</h3>
+        {{ grafico_produto|json_script:"dados-grafico-produto" }}
+        <div class="graficos-lado-a-lado">
+            <canvas id="grafico-produto-quantidade"></canvas>
+            <canvas id="grafico-produto-peso"></canvas>
+        </div>
+
+        <div class="scroll-x">
+            <table class="mapa-estoque">
+                <thead><tr><th>SKU</th><th>Descrição</th><th>Quantidade</th><th>Peso Total (kg)</th></tr></thead>
+                <tbody>
+                    {% for item in por_produto %}
+                    <tr>
+                        <td>{{ item.sku }}</td>
+                        <td>{{ item.descricao }}</td>
+                        <td>{{ item.quantidade }}</td>
+                        <td>{{ item.peso_total|floatformat:3 }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4">Nenhum palete criado no período.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    {% if pode_ver_producao %}
+    <section class="secao-estatistica">
+        <h2>Lotes Aprovados — Transferência da Produção</h2>
+        <div class="resumo-estoque">
+            <div class="stat">
+                <div class="rotulo">Lotes Aprovados</div>
+                <div class="valor">{{ total_lotes_producao }}</div>
+            </div>
+            <div class="stat">
+                <div class="rotulo">Peso Total (kg)</div>
+                <div class="valor">{{ peso_total_producao|floatformat:3 }}</div>
+            </div>
+        </div>
+        {{ grafico_producao|json_script:"dados-grafico-producao" }}
+        <canvas id="grafico-producao"></canvas>
+    </section>
+    {% endif %}
+
+    {% if pode_ver_logistica %}
+    <section class="secao-estatistica">
+        <h2>Lotes Aprovados — Transferência da Logística</h2>
+        <div class="resumo-estoque">
+            <div class="stat">
+                <div class="rotulo">Lotes Aprovados</div>
+                <div class="valor">{{ total_lotes_logistica }}</div>
+            </div>
+            <div class="stat">
+                <div class="rotulo">Peso Total (kg)</div>
+                <div class="valor">{{ peso_total_logistica|floatformat:3 }}</div>
+            </div>
+        </div>
+        {{ grafico_logistica|json_script:"dados-grafico-logistica" }}
+        <canvas id="grafico-logistica"></canvas>
+    </section>
+    {% endif %}
+</div>

@@ -4,73 +4,94 @@
 
 {% block content %}
 <div class="topbar">
-    <strong>Armazenagem (Put-away)</strong>
+    <strong>Armazenagem</strong>
     <a href="{% url 'home' %}">Início</a>
 </div>
-<div class="container">
-    <h1>Armazenagem — Bipagem de Palete</h1>
+<div class="container-amplo">
 
     {% for mensagem in messages %}
         <p class="{% if mensagem.tags == 'error' %}erro{% else %}ok{% endif %}">{{ mensagem }}</p>
     {% endfor %}
 
-    {% if palete %}
+    {% if lote %}
         <div class="cartao">
-            <p><strong>{{ palete.barcode_palete }}</strong></p>
-            <p>SKU: {{ palete.sku }} — Lote: {{ palete.lote }}</p>
-            <p>{{ palete.descricao }}</p>
-            <p>Peso: {{ palete.peso_kg }} kg — Destino: {{ palete.area_destino.nome|default:"—" }}</p>
+            <p><strong>Lote {{ lote }}</strong> — {{ paletes.0.sku }}</p>
+            <p>{{ paletes.0.descricao }}</p>
+            <p>{{ quantidade }} palete(s) — {{ peso_total }} kg</p>
+            <details>
+                <summary>Ver barcodes</summary>
+                <ul>
+                    {% for p in paletes %}<li>{{ p.barcode_palete }}</li>{% endfor %}
+                </ul>
+            </details>
         </div>
 
-        <p><a class="btn" href="{% url 'estoque:putaway' %}">Cancelar / Bipar outro palete</a></p>
+        <p><a class="btn" href="{% url 'estoque:putaway' %}">Cancelar / escolher outro lote</a></p>
 
-        <h2>Selecione o endereço no mapa</h2>
+        <h2>Escolha o Endereço</h2>
+        {% if sem_vagas %}
+            <p class="erro">Não há nenhuma vaga livre no armazém no momento — nenhum endereço pode
+            receber paletes. Retire paletes do mapa ou libere endereços antes de continuar.</p>
+        {% elif modo_parcial %}
+            <div class="cartao">
+                <p><strong>Este lote não cabe inteiro em nenhum endereço.</strong></p>
+                <p>Restam {{ quantidade }} palete(s). Clique em um endereço: ele será preenchido
+                com quantos paletes couberem — os primeiros da lista "Ver barcodes" acima — e o
+                restante continuará pendente. Repita a escolha até o lote acabar.</p>
+            </div>
+        {% else %}
+            <p>Clique em um endereço disponível para armazenar os {{ quantidade }} palete(s) do lote de uma vez.</p>
+        {% endif %}
+        <div class="legenda">
+            <span><span class="amostra nivel-vazio"></span> Vazio</span>
+            <span><span class="amostra nivel-baixo"></span> &lt; 30%</span>
+            <span><span class="amostra nivel-medio"></span> 30–69%</span>
+            <span><span class="amostra nivel-alto"></span> 70–99%</span>
+            <span><span class="amostra nivel-cheio"></span> Cheio (100%)</span>
+        </div>
+
         <form method="post" autocomplete="off">
             {% csrf_token %}
-            <input type="hidden" name="barcode_palete" value="{{ palete.barcode_palete }}">
-            {% for grupo in grade_por_lado %}
-                <h3>Lado {{ grupo.lado|stringformat:"02d" }}</h3>
-                <div class="scroll-x">
-                    <table class="mapa-estoque mapa-clicavel">
-                        <thead>
-                            <tr>
-                                <th>Guarda</th>
-                                {% for andar in andares %}<th>{{ andar }}</th>{% endfor %}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for linha in grupo.linhas %}
-                            <tr>
-                                <th>{{ linha.guarda|stringformat:"02d" }}</th>
-                                {% for celula in linha.celulas %}
-                                    {% if celula and celula.disponivel %}
-                                        <td class="cel-endereco nivel-{{ celula.nivel }}">
-                                            <button type="submit" class="btn-endereco" name="codigo_endereco" value="{{ celula.endereco.codigo }}">
-                                                {{ celula.endereco.codigo }}<small>{{ celula.endereco.ocupacao_atual }}/{{ celula.endereco.capacidade }}</small>
-                                            </button>
-                                        </td>
-                                    {% elif celula %}
-                                        <td class="cel-endereco nivel-{{ celula.nivel }} indisponivel">
-                                            <span>{{ celula.endereco.codigo }}<small>{{ celula.endereco.ocupacao_atual }}/{{ celula.endereco.capacidade }}</small></span>
-                                        </td>
-                                    {% else %}
-                                        <td class="cel-endereco nivel-vazio indisponivel"><span>—</span></td>
-                                    {% endif %}
-                                {% endfor %}
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            {% endfor %}
+            <input type="hidden" name="lote" value="{{ lote }}">
+            {% include 'estoque/_grade_enderecos.html' with titulo=grade_titulo clicavel=True %}
         </form>
     {% else %}
         <form method="post" autocomplete="off">
             {% csrf_token %}
-            <label for="id_barcode_palete">Bipe o palete</label>
-            <input type="text" name="barcode_palete" id="id_barcode_palete" autofocus autocomplete="off" required>
-            <button type="submit">Buscar Palete</button>
+            <div id="linha-lote">
+                <label for="id_barcode_palete">Barcode</label>
+                <input type="text" name="barcode_palete" id="id_barcode_palete" autofocus autocomplete="off" required>
+            </div>
+            <button type="submit">Buscar</button>
         </form>
+
+        {% if not paletes_pendentes %}
+        {% else %}
+        <div class="scroll-x">
+            <table class="tabela-guardas">
+                <thead>
+                    <tr>
+                        <th>Barcode</th>
+                        <th>Lote</th>
+                        <th>SKU</th>
+                        <th>Descrição</th>
+                        <th>Peso (kg)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for palete in paletes_pendentes %}
+                    <tr>
+                        <td>{{ palete.barcode_palete }}</td>
+                        <td>{{ palete.lote }}</td>
+                        <td>{{ palete.sku }}</td>
+                        <td>{{ palete.descricao }}</td>
+                        <td>{{ palete.peso_kg }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
     {% endif %}
 </div>
 {% endblock %}

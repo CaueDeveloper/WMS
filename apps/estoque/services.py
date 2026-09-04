@@ -1,6 +1,7 @@
 from django.db import transaction
+from django.utils import timezone
 
-from apps.recebimento.models import Palete
+from apps.recebimento.models import Palete, registrar_historico
 
 from .models import Endereco
 
@@ -9,91 +10,85 @@ class EnderecoCheioError(Exception):
     pass
 
 
-class MesmoEnderecoError(Exception):
-    pass
-
-
 class PaleteNaoArmazenadoError(Exception):
     pass
 
 
-@transaction.atomic
-def alocar_palete(palete, codigo_endereco):
-    """Aloca `palete` no endereço `codigo_endereco`.
+class LoteVazioError(Exception):
+    pass
 
-    `select_for_update()` bloqueia a linha do Endereco até o fim da transação,
-    para que duas requisições concorrentes nunca leiam a mesma ocupação e
-    ultrapassem a capacidade (D6: rígida de 21 paletes por endereço).
+
+@transaction.atomic
+def alocar_lote(lote, codigo_endereco, usuario=None, permitir_parcial=False):
+    """Aloca os paletes CONFERIDO_LOGISTICA de `lote` no endereço escolhido
+    manualmente pelo usuário na grade do Put-away. Trava as linhas do Palete
+    primeiro (antes de travar Endereco), mesma ordem de
+    `retirar_palete_do_mapa`, para não abrir risco de deadlock. A escolha de
+    quais paletes alocar primeiro (quando nem todos cabem) segue
+    `atualizado_em, pk` — mesma convenção de `_buscar_paletes_pendentes_do_lote`.
+
+    Se não há paletes pendentes do lote → LoteVazioError sem alterar nada.
+    Se o endereço não existe ou está inativo → Endereco.DoesNotExist.
+
+    Com `permitir_parcial=False` (padrão): se as vagas livres do endereço são
+    menores que o lote inteiro → EnderecoCheioError sem alterar nada (tudo ou
+    nada) — usado quando o lote cabe inteiro em algum endereço do armazém.
+
+    Com `permitir_parcial=True`: se o endereço não tem nenhuma vaga livre →
+    EnderecoCheioError sem alterar nada (garante que quem chama em loop
+    sempre avança, nunca fica preso alocando zero paletes); caso contrário
+    aloca só os primeiros paletes que couberem e deixa o resto
+    CONFERIDO_LOGISTICA — usado quando o lote não cabe inteiro em nenhum
+    endereço único do armazém, para o usuário completar a armazenagem
+    escolhendo mais de um endereço em chamadas sucessivas.
+
+    Retorna (endereco, paletes) — os paletes efetivamente alocados nesta
+    chamada, não necessariamente o lote inteiro.
     """
+    paletes = list(
+        Palete.objects.select_for_update()
+        .filter(estado='CONFERIDO_LOGISTICA', lote=lote)
+        .order_by('atualizado_em', 'pk')
+    )
+    if not paletes:
+        raise LoteVazioError(f'Nenhum palete pendente de armazenagem para o lote {lote}.')
+
     endereco = Endereco.objects.select_for_update().get(codigo=codigo_endereco, ativo=True)
 
-    if endereco.ocupacao_atual >= endereco.capacidade:
+    vagas = endereco.capacidade - endereco.ocupacao_atual
+    if permitir_parcial:
+        if vagas <= 0:
+            raise EnderecoCheioError(f'Endereço {endereco.codigo} não tem nenhuma vaga livre.')
+        paletes = paletes[:vagas]
+    elif vagas < len(paletes):
         raise EnderecoCheioError(
-            f'Endereço {endereco.codigo} está cheio ({endereco.ocupacao_atual}/{endereco.capacidade}).'
+            f'Endereço {endereco.codigo} tem {vagas} vaga(s) livre(s), mas o lote {lote} '
+            f'tem {len(paletes)} palete(s).'
         )
 
-    endereco.ocupacao_atual += 1
+    agora = timezone.now()
+    for palete in paletes:
+        palete.endereco = endereco
+        palete.estado = 'ARMAZENADO'
+        palete.atualizado_em = agora
+        palete.armazenado_em = agora
+    Palete.objects.bulk_update(paletes, ['endereco', 'estado', 'atualizado_em', 'armazenado_em'])
+
+    endereco.ocupacao_atual += len(paletes)
     endereco.save(update_fields=['ocupacao_atual'])
 
-    palete.endereco = endereco
-    palete.estado = 'ARMAZENADO'
-    palete.save(update_fields=['endereco', 'estado', 'atualizado_em'])
-
-    return endereco
+    registrar_historico(paletes, 'ARMAZENADO', usuario=usuario)
+    return endereco, paletes
 
 
 @transaction.atomic
-def mover_palete(palete, novo_codigo_endereco):
-    """Move um palete ARMAZENADO para outro endereço.
-
-    Trava a própria linha do Palete primeiro (mesmo padrão de `aprovar_lote`
-    em apps/recebimento/services.py) porque, ao contrário de `alocar_palete`,
-    o endereço de origem vem de estado mutável do palete — sem essa trava,
-    duas ações concorrentes no mesmo palete poderiam decrementar a ocupação
-    da origem duas vezes.
-    """
-    palete = Palete.objects.select_for_update().get(pk=palete.pk)
-    if palete.estado != 'ARMAZENADO' or palete.endereco_id is None:
-        raise PaleteNaoArmazenadoError(
-            f'Palete {palete.barcode_palete} não está mais armazenado '
-            '(pode ter sido alterado por outra operação). Atualize e tente novamente.'
-        )
-
-    codigo_atual = Endereco.objects.values_list('codigo', flat=True).get(pk=palete.endereco_id)
-    if novo_codigo_endereco == codigo_atual:
-        raise MesmoEnderecoError(f'Palete já está no endereço {codigo_atual}.')
-
-    # Lock em ordem determinística evita deadlock quando duas trocas concorrentes
-    # disputam os mesmos dois endereços em sentidos opostos.
-    codigo_menor, codigo_maior = sorted([codigo_atual, novo_codigo_endereco])
-    endereco_menor = Endereco.objects.select_for_update().get(codigo=codigo_menor)
-    endereco_maior = Endereco.objects.select_for_update().get(codigo=codigo_maior)
-    enderecos = {codigo_menor: endereco_menor, codigo_maior: endereco_maior}
-    endereco_atual = enderecos[codigo_atual]
-    novo_endereco = enderecos[novo_codigo_endereco]
-
-    if not novo_endereco.ativo:
-        raise Endereco.DoesNotExist(f'Endereço {novo_endereco.codigo} está inativo.')
-    if novo_endereco.ocupacao_atual >= novo_endereco.capacidade:
-        raise EnderecoCheioError(
-            f'Endereço {novo_endereco.codigo} está cheio '
-            f'({novo_endereco.ocupacao_atual}/{novo_endereco.capacidade}).'
-        )
-
-    endereco_atual.ocupacao_atual -= 1
-    endereco_atual.save(update_fields=['ocupacao_atual'])
-    novo_endereco.ocupacao_atual += 1
-    novo_endereco.save(update_fields=['ocupacao_atual'])
-
-    palete.endereco = novo_endereco
-    palete.save(update_fields=['endereco', 'atualizado_em'])
-    return novo_endereco
-
-
-@transaction.atomic
-def retirar_palete_do_mapa(palete):
+def retirar_palete_do_mapa(palete, usuario=None):
     """Retira um palete ARMAZENADO do mapa (saída física): libera a vaga e
-    marca RETIRADO. Mesma trava defensiva de `mover_palete` — ver docstring lá.
+    marca RETIRADO. Trava a própria linha do Palete primeiro (mesmo padrão de
+    `aprovar_lote` em apps/recebimento/services.py) porque, ao contrário de
+    `alocar_lote`, o endereço de origem vem de estado mutável do palete — sem
+    essa trava, duas ações concorrentes no mesmo palete poderiam decrementar
+    a ocupação da origem duas vezes.
     """
     palete = Palete.objects.select_for_update().get(pk=palete.pk)
     if palete.estado != 'ARMAZENADO' or palete.endereco_id is None:
@@ -108,5 +103,7 @@ def retirar_palete_do_mapa(palete):
 
     palete.endereco = None
     palete.estado = 'RETIRADO'
-    palete.save(update_fields=['endereco', 'estado', 'atualizado_em'])
+    palete.retirado_em = timezone.now()
+    palete.save(update_fields=['endereco', 'estado', 'atualizado_em', 'retirado_em'])
+    registrar_historico([palete], 'RETIRADO', usuario=usuario)
     return endereco

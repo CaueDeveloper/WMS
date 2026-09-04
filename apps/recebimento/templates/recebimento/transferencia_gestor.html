@@ -4,47 +4,94 @@
 
 {% block content %}
 <div class="topbar">
-    <strong>Transferência</strong>
+    <strong>Transferência: Produção</strong>
     <a href="{% url 'home' %}">Início</a>
 </div>
 <div class="container">
-    <h1>Bipagem de Transferência</h1>
 
     {% for mensagem in messages %}
         <p class="{% if mensagem.tags == 'error' %}erro{% else %}ok{% endif %}">{{ mensagem }}</p>
     {% endfor %}
 
+    {% if pode_bipar %}
     <form method="post" autocomplete="off">
         {% csrf_token %}
-        <label for="id_barcode_palete">Bipe o palete para transferência</label>
+        <label for="id_barcode_palete">Barcode do Palete</label>
         <input type="text" name="barcode_palete" id="id_barcode_palete" autofocus autocomplete="off" required>
-        <button type="submit">Bipar</button>
+        <button type="submit">Confirmar</button>
     </form>
-
-    <h2>Lotes Aguardando Aprovação</h2>
-    {% if not grupos %}
-        <p>Nenhum lote aguardando aprovação.</p>
-    {% else %}
-        <form method="post">
-            {% csrf_token %}
-            <button type="submit" name="aprovar_pendentes" value="1">
-                Aprovar Todos os Lotes Pendentes ({{ total_grupos }})
-            </button>
-        </form>
     {% endif %}
 
+    {% if grupos %}
+    <div class="legenda">
+        <span><span class="amostra cor-erro"></span> Pendente / nenhum bipado</span>
+        <span><span class="amostra cor-alerta"></span> Incompleto</span>
+        <span><span class="amostra cor-ok"></span> Concluído</span>
+    </div>
     {% for grupo in grupos %}
         <div class="cartao">
-            <p><strong>{{ grupo.lote }}</strong> — {{ grupo.sku }}</p>
-            <p>{{ grupo.quantidade }} palete(s) — {{ grupo.peso_total }} kg</p>
+            <div class="cartao-cabecalho">
+                <div>
+                    <p><strong>Lote:</strong> {{ grupo.lote }} — {{ grupo.descricao }}</p>
+                    <p><strong>N° de etiquetas criadas:</strong> {{ grupo.total_lote }}</p>
+                    <p><strong>Peso total:</strong> {{ grupo.peso_total }} kg</p>
+                </div>
+                <p class="contador-bipagem
+                    {% if grupo.quantidade == 0 %}contador-zerado
+                    {% elif grupo.pendentes_bipagem %}contador-parcial
+                    {% else %}contador-completo{% endif %}">
+                    {% if not grupo.pendentes_bipagem %}✓ {% endif %}{{ grupo.quantidade }}/{{ grupo.total_lote }}
+                </p>
+            </div>
             <details>
                 <summary>Ver barcodes</summary>
                 <ul>
-                    {% for p in grupo.paletes %}<li>{{ p.barcode_palete }}</li>{% endfor %}
+                    {% for p in grupo.paletes %}
+                        <li>
+                            <span class="barcode-item">{{ p.barcode_palete }} — {{ p.peso_kg }} kg</span>
+                            {% if p.estado == 'EM_TRANSFERENCIA' %}
+                                <span class="selo-status selo-concluido">Concluído</span>
+                            {% else %}
+                                <span class="selo-status selo-pendente">Pendente</span>
+                            {% endif %}
+                        </li>
+                    {% endfor %}
                 </ul>
             </details>
+            {% if pode_aprovar %}
+            <form method="post">
+                {% csrf_token %}
+                <button type="submit" name="aprovar_lote" value="{{ grupo.lote }}" {% if grupo.pendentes_bipagem %}disabled{% endif %}>
+                    Aprovar Lote
+                </button>
+            </form>
+            {% endif %}
         </div>
     {% endfor %}
+    {% endif %}
+
+    {% if pode_aprovar %}
+    <details class="painel-relatorio">
+        <summary class="btn">Gerar Relatório de Aprovação</summary>
+        <form method="get">
+            <label for="id_data_relatorio">Data de aprovação</label>
+            <input type="date" name="data_relatorio" id="id_data_relatorio" value="{{ data_relatorio|date:'Y-m-d' }}">
+            <button type="submit">Buscar</button>
+        </form>
+        <form method="post">
+            {% csrf_token %}
+            <div class="cartao">
+                {% if lotes_data_relatorio %}
+                <p>Selecione os lotes aprovados em {{ data_relatorio|date:'d/m/Y' }} que devem entrar no relatório:</p>
+                <ul>{% for lote in lotes_data_relatorio %}<li><label><input type="checkbox" name="lote_relatorio" value="{{ lote }}"> {{ lote }}</label></li>{% endfor %}</ul>
+                <button type="submit" name="gerar_relatorio" value="1">Gerar Relatório</button>
+                {% else %}
+                <p>Nenhum lote aprovado em {{ data_relatorio|date:'d/m/Y' }}.</p>
+                {% endif %}
+            </div>
+        </form>
+    </details>
+    {% endif %}
 
     {% if grupos.paginator.num_pages > 1 %}
     <div class="paginacao">

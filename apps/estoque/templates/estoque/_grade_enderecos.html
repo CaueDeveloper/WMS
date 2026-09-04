@@ -1,0 +1,49 @@
+{% if titulo %}<h3 class="titulo-grade">{{ titulo }}</h3>{% endif %}
+<div class="scroll-x">
+<table class="mapa-estoque">
+    <thead>
+        <tr>
+            <th>Andar</th>
+            {% for modulo in modulos %}<th>{{ modulo|stringformat:"02d" }}</th>{% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for linha in grade %}
+        <tr>
+            <th>{{ linha.andar }}</th>
+            {% for celula in linha.celulas %}
+                {% if celula %}
+                    {% if clicavel and celula.disponivel %}
+                        <td class="cel-endereco-btn">
+                            <button type="submit" class="btn-endereco nivel-{{ celula.nivel }}"
+                                    name="codigo_endereco" value="{{ celula.endereco.codigo }}">
+                                {{ celula.endereco.codigo }}
+                                <small>{{ celula.endereco.ocupacao_atual }}/{{ celula.endereco.capacidade }}</small>
+                            </button>
+                        </td>
+                    {% elif link_endereco %}
+                        <td class="cel-endereco-btn">
+                            <a class="btn-endereco nivel-{{ celula.nivel }}"
+                               href="{{ link_endereco }}?modo=endereco&codigo_endereco={{ celula.endereco.codigo|urlencode }}">
+                                {{ celula.endereco.codigo }}
+                                <small>{{ celula.endereco.ocupacao_atual }}/{{ celula.endereco.capacidade }}</small>
+                            </a>
+                        </td>
+                    {% else %}
+                        <td class="cel-endereco nivel-{{ celula.nivel }}{% if clicavel %} indisponivel{% endif %}{% if celula.eh_destino %} destino-caminho{% elif celula.eh_inicio %} inicio-caminho{% elif celula.no_caminho %} no-caminho{% endif %}">
+                            {{ celula.endereco.codigo }}
+                            <small>{{ celula.endereco.ocupacao_atual }}/{{ celula.endereco.capacidade }}</small>
+                            {% if celula.eh_inicio %}<small class="marcador-rota">● Início</small>{% endif %}
+                            {% if celula.eh_destino %}<small class="marcador-rota">★ Destino</small>{% endif %}
+                            {% if celula.no_caminho and not celula.eh_destino %}<small class="seta-rota" aria-hidden="true">↓</small>{% endif %}
+                        </td>
+                    {% endif %}
+                {% else %}
+                    <td class="cel-endereco nivel-vazio">—</td>
+                {% endif %}
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>

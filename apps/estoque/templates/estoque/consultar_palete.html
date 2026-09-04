@@ -1,59 +1,236 @@
 {% extends 'base.html' %}
 
-{% block title %}Consultar Palete — WMS{% endblock %}
+{% block title %}Consultar — WMS{% endblock %}
 
 {% block content %}
 <div class="topbar">
-    <strong>Consultar Palete</strong>
+    <strong>Consultar</strong>
     <a href="{% url 'home' %}">Início</a>
 </div>
-<div class="container">
-    <h1>Consultar Palete — Bipagem</h1>
+<div class="container-amplo">
 
     {% for mensagem in messages %}
         <p class="{% if mensagem.tags == 'error' %}erro{% else %}ok{% endif %}">{{ mensagem }}</p>
     {% endfor %}
 
-    {% if palete %}
-        <div class="cartao">
-            <p><strong>{{ palete.barcode_palete }}</strong></p>
-            <p>SKU: {{ palete.sku }} — Lote: {{ palete.lote }}</p>
-            <p>{{ palete.descricao }}</p>
-            <p>Peso: {{ palete.peso_kg }} kg — Destino: {{ palete.area_destino.nome|default:"—" }}</p>
-            <p>Status: <strong>{{ palete.get_estado_display }}</strong></p>
-            <p>Endereço atual: <strong>{{ palete.endereco.codigo|default:"—" }}</strong></p>
-        </div>
+    {% if modo %}
+        <p><a class="btn btn-grande" href="{% url 'estoque:consultar_palete' %}">« Escolher outro tipo de consulta</a></p>
+        <br>
+        <br>
+    {% endif %}
 
-        {% if palete.estado == 'ARMAZENADO' %}
-            <form method="post" autocomplete="off">
-                {% csrf_token %}
-                <input type="hidden" name="barcode_palete" value="{{ palete.barcode_palete }}">
-                <label for="id_novo_codigo_endereco">Bipe ou digite o novo endereço</label>
-                <input type="text" name="novo_codigo_endereco" id="id_novo_codigo_endereco" autofocus autocomplete="off" required>
-                <button type="submit">Alterar Endereço</button>
-            </form>
+    {% if not modo %}
+        <p><a class="btn btn-grande" href="?modo=palete">Consultar por Palete</a></p>
+        <p><a class="btn btn-grande" href="?modo=lote">Consultar por Lote</a></p>
+        <p><a class="btn btn-grande" href="?modo=endereco">Consultar por Endereço (Mapa de Estoque)</a></p>
 
-            <h2>Endereços disponíveis</h2>
-            {% if enderecos %}<ul>
-                {% for endereco in enderecos %}<li>{{ endereco.codigo }} ({{ endereco.ocupacao_atual }}/{{ endereco.capacidade }})</li>{% endfor %}
-            </ul>{% else %}<p>Nenhum endereço disponível no momento.</p>{% endif %}
+    {% elif modo == 'palete' %}
+        <center><h2>Consultar por Palete</h2></center>
+        {% if palete %}
+            <div class="cartao">
+                <p><strong>{{ palete.barcode_palete }}</strong></p>
+                <p>SKU: {{ palete.sku }} — Lote: {{ palete.lote }}</p>
+                <p>{{ palete.descricao }}</p>
+                <p>Peso: {{ palete.peso_kg }} kg</p>
+                <p>Status: <strong>{{ palete.get_estado_display }}</strong></p>
+                <p>Data de fabricação: <strong>{{ palete.criado_em|date:"d/m/Y" }}</strong></p>
+                <p>Endereço atual: <strong>{{ palete.endereco.codigo|default:"—" }}</strong></p>
+            </div>
 
-            <form method="post" autocomplete="off">
-                {% csrf_token %}
-                <input type="hidden" name="barcode_palete" value="{{ palete.barcode_palete }}">
-                <input type="hidden" name="retirar" value="1">
-                <button type="submit" class="btn-rejeitar">Retirar do Mapa (Saída Física)</button>
+            {% if palete.estado == 'ARMAZENADO' %}
+                <form method="post" autocomplete="off">
+                    {% csrf_token %}
+                    <input type="hidden" name="barcode_palete" value="{{ palete.barcode_palete }}">
+                    <input type="hidden" name="retirar" value="1">
+                    <button type="submit" class="btn-rejeitar">Retirar do Mapa (Saída Física)</button>
+                </form>
+            {% endif %}
+
+            <p><a class="btn btn-grande" href="?modo=palete">Nova bipagem</a></p>
+        {% else %}
+            <form method="get" autocomplete="off">
+                <input type="hidden" name="modo" value="palete">
+                <label for="id_barcode">Bipe ou digite o código de barras do palete</label>
+                <input type="text" name="barcode" id="id_barcode" value="{{ barcode }}" autofocus autocomplete="off">
+                <button type="submit">Buscar</button>
             </form>
         {% endif %}
 
-        <p><a class="btn" href="{% url 'estoque:consultar_palete' %}">Bipar outro palete</a></p>
-    {% else %}
-        <form method="post" autocomplete="off">
-            {% csrf_token %}
-            <label for="id_barcode_palete">Bipe o palete</label>
-            <input type="text" name="barcode_palete" id="id_barcode_palete" autofocus autocomplete="off" required>
-            <button type="submit">Buscar Palete</button>
+    {% elif modo == 'lote' %}
+       <center><h2>Consultar por Lote</h2></center>
+        <form method="get" autocomplete="off">
+            <input type="hidden" name="modo" value="lote">
+            <label for="id_lote">Lote</label>
+            <input type="text" name="lote" id="id_lote" value="{{ lote }}" autofocus autocomplete="off">
+
+            <label for="id_data_fabricacao">Data de Fabricação do Palete</label>
+            <input type="date" name="data_fabricacao" id="id_data_fabricacao" value="{{ data_fabricacao }}">
+            <br>
+            <button type="submit">Buscar</button>
         </form>
+
+        {% if resultados %}
+        <div class="scroll-x">
+            <table class="tabela-guardas">
+                <thead>
+                    <tr>
+                        <th>Barcode</th>
+                        <th>SKU</th>
+                        <th>Lote</th>
+                        <th>Status</th>
+                        <th>Data de Fabricação</th>
+                        <th>Endereço</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in resultados %}
+                    <tr>
+                        <td><a href="?modo=palete&barcode={{ p.barcode_palete|urlencode }}">{{ p.barcode_palete }}</a></td>
+                        <td>{{ p.sku }}</td>
+                        <td>{{ p.lote }}</td>
+                        <td>{{ p.get_estado_display }}</td>
+                        <td>{{ p.criado_em|date:"d/m/Y" }}</td>
+                        <td>{{ p.endereco.codigo|default:"—" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="paginacao">
+            {% if resultados.has_previous %}
+                <a class="btn btn-grande" href="?modo=lote&lote={{ lote|urlencode }}&sku={{ sku|urlencode }}&data_fabricacao={{ data_fabricacao|urlencode }}&pg={{ resultados.previous_page_number }}">« Anterior</a>
+            {% else %}
+                <span class="btn-disabled">« Anterior</span>
+            {% endif %}
+            <span class="pagina-atual">Página {{ resultados.number }} de {{ resultados.paginator.num_pages }}</span>
+            {% if resultados.has_next %}
+                <a class="btn btn-grande" href="?modo=lote&lote={{ lote|urlencode }}&sku={{ sku|urlencode }}&data_fabricacao={{ data_fabricacao|urlencode }}&pg={{ resultados.next_page_number }}">Próxima »</a>
+            {% else %}
+                <span class="btn-disabled">Próxima »</span>
+            {% endif %}
+        </div>
+        {% endif %}
+
+    {% elif modo == 'endereco' %}
+        {% if endereco %}
+            <div class="cartao">
+                <p><strong>{{ endereco.codigo }}</strong></p>
+                <p>Ocupação: {{ endereco.ocupacao_atual }}/{{ endereco.capacidade }}</p>
+            </div>
+
+            {% if paletes %}
+            <div class="scroll-x">
+                <table class="tabela-guardas">
+                    <thead>
+                        <tr>
+                            <th>Barcode</th>
+                            <th>SKU</th>
+                            <th>Lote</th>
+                            <th>Data de Fabricação</th>
+                            <th>Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in paletes %}
+                        <tr>
+                            <td><a href="?modo=palete&barcode={{ p.barcode_palete|urlencode }}">{{ p.barcode_palete }}</a></td>
+                            <td>{{ p.sku }}</td>
+                            <td>{{ p.lote }}</td>
+                            <td>{{ p.criado_em|date:"d/m/Y" }}</td>
+                            <td>
+                                <form method="post" autocomplete="off">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="barcode_palete" value="{{ p.barcode_palete }}">
+                                    <input type="hidden" name="codigo_endereco" value="{{ endereco.codigo }}">
+                                    <input type="hidden" name="retirar" value="1">
+                                    <button type="submit" class="btn-rejeitar">Retirar</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+                <p>Nenhum palete armazenado neste endereço no momento.</p>
+            {% endif %}
+
+            <p><a class="btn btn-grande" href="?modo=endereco">Nova consulta</a></p>
+        {% else %}
+            <center><h2>Consulte por Andar / Corredor / Mapa Inteiro</h2></center>
+            <form method="get" autocomplete="off">
+                <input type="hidden" name="modo" value="endereco">
+                <label for="id_andar">Andar</label>
+                <select name="andar" id="id_andar">
+                    <option value="">Todos</option>
+                    {% for a in andares %}
+                        <option value="{{ a }}" {% if andar == a %}selected{% endif %}>Andar {{ a }}</option>
+                    {% endfor %}
+                </select>
+
+                <label for="id_modulo">Corredor</label>
+                <select name="modulo" id="id_modulo">
+                    <option value="">Todos</option>
+                    {% for m in modulos %}
+                        <option value="{{ m }}" {% if modulo == m|stringformat:"s" %}selected{% endif %}>{{ m|stringformat:"02d" }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit">Buscar</button>
+            </form>
+
+            {% if filtro_submetido %}
+                {% if resultados_mapa %}
+                <div class="scroll-x">
+                    <table class="tabela-guardas">
+                        <thead>
+                            <tr>
+                                <th>Barcode</th>
+                                <th>SKU</th>
+                                <th>Lote</th>
+                                <th>Data de Fabricação</th>
+                                <th>Endereço</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in resultados_mapa %}
+                            <tr>
+                                <td><a href="?modo=palete&barcode={{ p.barcode_palete|urlencode }}">{{ p.barcode_palete }}</a></td>
+                                <td>{{ p.sku }}</td>
+                                <td>{{ p.lote }}</td>
+                                <td>{{ p.criado_em|date:"d/m/Y" }}</td>
+                                <td>{{ p.endereco.codigo|default:"—" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="paginacao">
+                    {% if resultados_mapa.has_previous %}
+                        <a class="btn btn-grande" href="?modo=endereco&andar={{ andar|urlencode }}&modulo={{ modulo|urlencode }}&pg={{ resultados_mapa.previous_page_number }}">« Anterior</a>
+                    {% else %}
+                        <span class="btn-disabled">« Anterior</span>
+                    {% endif %}
+                    <span class="pagina-atual">Página {{ resultados_mapa.number }} de {{ resultados_mapa.paginator.num_pages }}</span>
+                    {% if resultados_mapa.has_next %}
+                        <a class="btn btn-grande" href="?modo=endereco&andar={{ andar|urlencode }}&modulo={{ modulo|urlencode }}&pg={{ resultados_mapa.next_page_number }}">Próxima »</a>
+                    {% else %}
+                        <span class="btn-disabled">Próxima »</span>
+                    {% endif %}
+                </div>
+                {% else %}
+                    <p>Nenhum palete armazenado para este filtro no momento.</p>
+                {% endif %}
+            {% endif %}
+
+            <div class="legenda">
+                <span><span class="amostra nivel-vazio"></span> Vazio</span>
+                <span><span class="amostra nivel-baixo"></span> &lt; 30%</span>
+                <span><span class="amostra nivel-medio"></span> 30–69%</span>
+                <span><span class="amostra nivel-alto"></span> 70–99%</span>
+                <span><span class="amostra nivel-cheio"></span> Cheio (100%)</span>
+            </div>
+            {% include 'estoque/_grade_enderecos.html' with grade=grade modulos=modulos link_endereco=request.path %}
+        {% endif %}
     {% endif %}
 </div>
 {% endblock %}
