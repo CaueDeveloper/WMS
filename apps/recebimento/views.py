@@ -14,7 +14,6 @@ from apps.estoque.models import Produto
 from .forms import RecebimentoForm
 from .models import Palete, PaleteHistorico, registrar_historico
 from .services import LoteIncompletoError, LoteVazioError, aprovar_lote, aprovar_lote_logistica
-from .whatsapp import disparar_notificacao_async
 from .zpl import disparar_impressao_async
 
 PESO_FIXO_RECEBIMENTO_KG = Decimal('500')
@@ -182,10 +181,9 @@ def transferencia_gestor(request):
             except (LoteVazioError, LoteIncompletoError) as exc:
                 messages.error(request, str(exc))
             else:
-                disparar_notificacao_async([(lote, paletes)])
                 messages.success(
                     request,
-                    f'Lote {lote} aprovado ({len(paletes)} palete(s)). Notificação enviada à logística.',
+                    f'Lote {lote} aprovado ({len(paletes)} palete(s)).',
                 )
         elif 'gerar_relatorio' in request.POST and pode_aprovar:
             lotes_selecionados = request.POST.getlist('lote_relatorio')

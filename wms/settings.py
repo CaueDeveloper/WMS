@@ -19,8 +19,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def _carregar_dotenv(caminho):
-    """Loader caseiro de .env (KEY=VALUE por linha), sem dependência externa —
-    mesmo padrão do projeto de preferir stdlib (ver apps/recebimento/whatsapp.py).
+    """Loader caseiro de .env (KEY=VALUE por linha), sem dependência externa.
     setdefault garante que uma env var real (systemd/CI/container) sempre tem
     prioridade sobre o arquivo .env local."""
     if not caminho.exists():
@@ -128,19 +127,6 @@ LOGOUT_REDIRECT_URL = 'login'
 # Valores hardcoded abaixo são só o fallback de dev — configuráveis via .env (ver .env.example).
 IMPRESSORA_ZPL_HOST = os.environ.get('IMPRESSORA_ZPL_HOST')
 IMPRESSORA_ZPL_PORT = int(os.environ.get('IMPRESSORA_ZPL_PORT'))
-
-# D8: Z-API (WhatsApp Business API) — notifica o Gestor de Logística por WhatsApp
-# quando um lote é aprovado, substituindo o aviso manual hoje feito por grupos de
-# WhatsApp (ver docs/PRD.md linha 27).
-# Sem valores reais hardcoded aqui — credenciais e número de destino vêm só do
-# .env (ver .env.example).
-ZAPI_INSTANCE_ID = os.environ.get('ZAPI_INSTANCE_ID', '')
-ZAPI_TOKEN = os.environ.get('ZAPI_TOKEN', '')
-# Header "Client-Token" (segurança de conta Z-API, distinto do token da URL acima).
-ZAPI_CLIENT_TOKEN = os.environ.get('ZAPI_CLIENT_TOKEN', '')
-ZAPI_LOGISTICA_WHATSAPP_NUMBER = os.environ.get(
-    'ZAPI_LOGISTICA_WHATSAPP_NUMBER', ''
-)  # DDI+DDD+número, sem símbolos
 
 
 # LDAP/Active Directory — autenticação corporativa via django-auth-ldap.

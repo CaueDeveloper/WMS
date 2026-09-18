@@ -39,7 +39,7 @@ A operação atual depende de processos manuais (pesagem manual, conferências i
 | **D5** | Impressão | Impressora térmica industrial **Zebra ZT421** via linguagem **ZPL**. | O backend Django abre um Socket TCP/IP na porta `9100` e envia a string ZPL diretamente para o IP da impressora. |
 | **D6** | Endereçamento | Grade de **Guardas (01-20) × Andares (A, B, C) × Lados (01, 02)**. | Total de 120 endereços físicos, código de 5 segmentos `001-LL-A-GG-01` (ex.: `001-02-A-20-01`). **Capacidade máxima rígida de 21 paletes por endereço**. |
 | **D7** | Autenticação | **Django Auth System** com controle por Grupos (`auth.Group`). | Permissões controladas via decorators (`@permission_required`) ou mixins nas Views. |
-| **D8** | Notificação | **Z-API (WhatsApp Business API)** avisa o Gestor de Logística quando um lote é aprovado. | O backend Django faz um `POST` HTTP (via `urllib`, sem dependências externas) para a API do Z-API, de forma assíncrona (thread), substituindo o aviso manual por grupos de WhatsApp. |
+| **D8** | Notificação `[REMOVIDO]` | ~~Z-API (WhatsApp Business API) avisa o Gestor de Logística quando um lote é aprovado.~~ | Integração removida do projeto — decisão de não usar mais o Z-API. O aviso à Logística volta a ser manual. |
 
 ### 2.1 Premissas Explícitas `[ASSUMPTION]`
 * `A1`: O coletor Zebra opera em modo online contínuo via Wi-Fi interno da empresa.

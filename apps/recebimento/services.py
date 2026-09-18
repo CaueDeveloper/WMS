@@ -20,8 +20,7 @@ def aprovar_lote(lote, usuario=None):
     um lote só é aprovado na transferência da produção depois que todas as
     etiquetas impressas para ele forem bipadas. Não atribui area_destino — essa
     escolha foi adiada para uma etapa futura fora deste fluxo. Retorna o snapshot
-    (pré-atualização) dos paletes afetados, usado para montar a notificação
-    WhatsApp.
+    (pré-atualização) dos paletes afetados.
 
     select_for_update() bloqueia as linhas até o fim da transação: duas aprovações
     concorrentes do mesmo lote nunca processam os mesmos paletes duas vezes — a

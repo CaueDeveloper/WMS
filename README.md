@@ -20,7 +20,7 @@ O WMS é uma camada de controle de estoque que **não substitui o SAP B1**, mas 
 ✅ Endereçamento em grade (Corredores 01–20 × Andares A/B/C = 60 locais)  
 ✅ Capacidade rígida por endereço (21 paletes) com proteção contra condição de corrida  
 ✅ Impressão assíncrona via ZPL, disparada imediatamente na entrada (Zebra DataWedge em modo emulação de teclado)  
-✅ Aprovação em lote pelo Gestor com notificação automática via WhatsApp (Z-API) para a Logística  
+✅ Aprovação em lote pelo Gestor  
 ✅ Reautenticação por senha do Gestor antes de finalizar guardas  
 
 ## 🛠️ Stack Técnico
@@ -31,7 +31,6 @@ O WMS é uma camada de controle de estoque que **não substitui o SAP B1**, mas 
 | **Banco de Dados** | SQLite (dev) / MySQL (prod) |
 | **Frontend** | HTML5 + CSS3 (sem SPA) |
 | **Impressão** | Zebra ZT421 via ZPL (TCP/IP porta 9100) |
-| **Notificação** | Z-API (WhatsApp Business API) via HTTP, `urllib` (sem dependências externas) |
 | **Coleta** | Zebra DataWedge em emulação de teclado |
 | **Autenticação** | Django Auth nativo + `auth.Group` |
 
@@ -61,17 +60,14 @@ WMS2/
 │   │   ├── admin.py            # Interface admin para Endereco, AreaDestino
 │   │   ├── management/commands/
 │   │   │   └── gerar_estrutura_armazem.py  # Cria 60 endereços (idempotente)
-│   │   ├── tests.py            # Testes de concorrência e validação
 │   │   └── templates/estoque/  # putaway.html, mapa_estoque.html
 │   │
-│   └── recebimento/            # Entrada, transferência, impressão ZPL, notificação WhatsApp
+│   └── recebimento/            # Entrada, transferência, impressão ZPL
 │       ├── models.py           # Palete
 │       ├── views.py            # receber_palete, transferencia_gestor
 │       ├── services.py         # aprovar_lote (transação + lock)
 │       ├── forms.py            # RecebimentoForm
 │       ├── zpl.py              # disparar_impressao_async (socket TCP/IP)
-│       ├── whatsapp.py         # disparar_notificacao_async (Z-API via HTTP)
-│       ├── tests.py            # Testes de ZPL, WhatsApp, permissões, fluxos
 │       └── templates/recebimento/  # receber_palete.html, transferencia_gestor.html
 │
 ├── docs/                        # Documentação
@@ -167,7 +163,6 @@ Gestor bipa com o coletor cada palete impresso:
 
 Quando todos os paletes do lote (mesmo SKU/dia) estiverem na fila, o Gestor **aprova o lote inteiro de uma vez**, escolhendo uma única `AreaDestino`:
 - Estado `EM_TRANSFERENCIA` → `CONFERIDO` para todos os paletes do lote.
-- Dispara automaticamente uma notificação via WhatsApp (Z-API) para o Gestor de Logística.
 
 ### 3️⃣ Put-away (Gestor de Logística)
 
@@ -241,7 +236,7 @@ class Palete(models.Model):
 CRIADO → (disparar_impressao_async, imediato)
   ↓ (Gestor bipa no coletor)
 EM_TRANSFERENCIA
-  ↓ (Gestor aprova o lote inteiro + disparar_notificacao_async)
+  ↓ (Gestor aprova o lote inteiro)
 CONFERIDO
   ↓ (Gestor de Logística faz o putaway)
 ARMAZENADO
@@ -262,43 +257,6 @@ A impressão é disparada de forma **assíncrona** em thread daemon via `apps/re
 # Exemplo de ativação
 disparar_impressao_async(palete_id=123)
 ```
-
-## 💬 Notificação WhatsApp (Z-API)
-
-Quando o Gestor aprova um lote inteiro na tela de transferência, uma notificação é disparada de forma **assíncrona** em thread daemon via `apps/recebimento/whatsapp.py::disparar_notificacao_async` — mesmo padrão de resiliência da impressão ZPL (thread não bloqueia a resposta HTTP, falhas de rede só são logadas):
-
-- **Provedor:** Z-API (WhatsApp Business API)
-- **Protocolo:** HTTP `POST` via `urllib` (sem dependências externas)
-- **Destinatário:** Número fixo do Gestor de Logística, configurável via `ZAPI_LOGISTICA_WHATSAPP_NUMBER` em `settings.py`
-- **Conteúdo:** Lote, SKU, quantidade de paletes, peso total, área de destino e a lista de barcodes aprovados
-
-```python
-# Exemplo de ativação
-disparar_notificacao_async(lote, area_destino, paletes)
-```
-
-## 🧪 Testes
-
-Rode os testes com:
-
-```bash
-# Todos os testes
-python manage.py test
-
-# Testes específicos
-python manage.py test apps.core.tests
-python manage.py test apps.estoque.tests
-python manage.py test apps.recebimento.tests
-
-# Testes com verbosidade
-python manage.py test --verbosity=2
-```
-
-### Cobertura de Testes
-
-- ✅ Autenticação e grupos (`core/tests.py`)
-- ✅ Alojamento e concorrência (`estoque/tests.py`)
-- ✅ Validação de palete, ZPL, transferência/aprovação de lote e notificação WhatsApp (`recebimento/tests.py`)
 
 ## 🔐 Autenticação e Grupos
 
@@ -345,14 +303,6 @@ IMPRESSORA_ZPL_HOST = '192.168.1.100'  # IP da impressora
 IMPRESSORA_ZPL_PORT = 9100              # Porta TCP/IP
 ```
 
-**Z-API (WhatsApp):**
-```python
-ZAPI_INSTANCE_ID = '...'                          # ID da instância Z-API
-ZAPI_TOKEN = '...'                                # Token da instância
-ZAPI_CLIENT_TOKEN = '...'                         # Client-Token (conta Z-API)
-ZAPI_LOGISTICA_WHATSAPP_NUMBER = '5511999999999'  # Número do Gestor de Logística
-```
-
 ## 📚 Documentação Adicional
 
 - **[PRD.md](docs/PRD.md)** — Product Requirements Document (requisitos detalhados)
@@ -366,8 +316,6 @@ ZAPI_LOGISTICA_WHATSAPP_NUMBER = '5511999999999'  # Número do Gestor de Logíst
 3. Commit suas mudanças (`git commit -am 'Adiciona MinhaFeature'`)
 4. Push para a branch (`git push origin feature/MinhaFeature`)
 5. Abra um Pull Request
-
-Todas as mudanças devem ser testadas via `python manage.py test` antes de enviar.
 
 ## 📞 Contato
 
@@ -387,7 +335,7 @@ Este projeto é propriedade da Café do Sítio. Todos os direitos reservados.
 - [x] **M2** — Carga inicial de endereços
 - [x] **M3** — Módulo de entrada (recebimento + impressão)
 - [x] **M4** — Put-away e concorrência
-- [x] **M5** — Impressão imediata, transferência por bipagem, aprovação em lote e notificação WhatsApp (Z-API)
+- [x] **M5** — Impressão imediata, transferência por bipagem e aprovação em lote
 - [x] **M6** — Remoção do estado DIVERGENTE (peso sempre aceito, sem bloqueio de fluxo)
 
 **Próximas etapas:** Integração com SAP B1 (Outbox), testes em produção, otimizações de performance.
