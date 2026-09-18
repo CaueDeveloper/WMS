@@ -1,8 +1,9 @@
 from django.contrib.auth.models import Group, User
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from apps.core.ldap_signals import _mapear_grupos_ldap
 from apps.estoque.models import Endereco
 from apps.recebimento.models import Palete, PaleteHistorico
 from apps.recebimento.services import aprovar_lote, aprovar_lote_logistica
@@ -21,6 +22,53 @@ class GruposPadraoTests(TestCase):
         nomes = set(Group.objects.values_list('name', flat=True))
         self.assertNotIn('Gestores', nomes)
         self.assertNotIn('Operadores', nomes)
+
+
+class MapearGruposLdapTests(TestCase):
+
+    MAPA = {
+        'cn=wms-operador-producao,ou=grupos,dc=sitio,dc=local': ['Operador Produção'],
+        'cn=wms-gestor-logistica,ou=grupos,dc=sitio,dc=local': ['Gestor Logística'],
+    }
+
+    class _LdapUserFake:
+        def __init__(self, group_dns):
+            self.group_dns = group_dns
+
+    @override_settings(AUTH_LDAP_GROUP_DN_MAP=MAPA)
+    def test_usuario_recebe_grupo_correspondente_ao_dn_do_ad(self):
+        usuario = User.objects.create_user('joao.silva', password='x')
+        ldap_user = self._LdapUserFake({'CN=WMS-Operador-Producao,OU=Grupos,DC=sitio,DC=local'})
+
+        _mapear_grupos_ldap(sender=None, user=usuario, ldap_user=ldap_user)
+
+        self.assertEqual(list(usuario.groups.values_list('name', flat=True)), ['Operador Produção'])
+
+    @override_settings(AUTH_LDAP_GROUP_DN_MAP=MAPA)
+    def test_grupo_mapeado_e_removido_quando_usuario_sai_do_grupo_ad(self):
+        usuario = User.objects.create_user('maria.souza', password='x')
+        usuario.groups.add(Group.objects.get(name='Gestor Logística'))
+
+        _mapear_grupos_ldap(sender=None, user=usuario, ldap_user=self._LdapUserFake(set()))
+
+        self.assertEqual(list(usuario.groups.values_list('name', flat=True)), [])
+
+    @override_settings(AUTH_LDAP_GROUP_DN_MAP=MAPA)
+    def test_grupo_nao_mapeado_do_usuario_e_preservado(self):
+        usuario = User.objects.create_user('ana.lima', password='x')
+        usuario.groups.add(Group.objects.get(name='Administradores'))
+
+        _mapear_grupos_ldap(sender=None, user=usuario, ldap_user=self._LdapUserFake(set()))
+
+        self.assertEqual(list(usuario.groups.values_list('name', flat=True)), ['Administradores'])
+
+    @override_settings(AUTH_LDAP_GROUP_DN_MAP=None)
+    def test_sem_mapeamento_configurado_nao_faz_nada(self):
+        usuario = User.objects.create_user('sem.mapa', password='x')
+
+        _mapear_grupos_ldap(sender=None, user=usuario, ldap_user=self._LdapUserFake({'cn=qualquer'}))
+
+        self.assertEqual(list(usuario.groups.values_list('name', flat=True)), [])
 
 
 class CriarUsuariosDemoTests(TestCase):

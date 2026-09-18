@@ -61,14 +61,18 @@ if not SECRET_KEY:
             '(ou no .env) antes de rodar com DJANGO_DEBUG=False.'
         )
 
-# [ASSUMPTION] fallback abaixo é o IP da máquina de desenvolvimento na rede interna
-# (Zebra/coletores) — em produção, defina DJANGO_ALLOWED_HOSTS no .env (lista
-# separada por vírgula, ex.: "10.61.1.10,wms.cafedositio.local").
+# Defina DJANGO_ALLOWED_HOSTS no .env (lista separada por vírgula, ex.:
+# "10.61.1.10,wms.cafedositio.local") — sem IPs/hosts reais hardcoded aqui.
 _allowed_hosts_env = os.environ.get('DJANGO_ALLOWED_HOSTS')
 if _allowed_hosts_env:
     ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()]
+elif DEBUG:
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 else:
-    ALLOWED_HOSTS = ['10.61.1.193', 'localhost', '127.0.0.1']
+    raise RuntimeError(
+        'DJANGO_ALLOWED_HOSTS não configurada. Defina essa variável de ambiente '
+        '(ou no .env) antes de rodar com DJANGO_DEBUG=False.'
+    )
 
 
 # Application definition
@@ -122,32 +126,30 @@ LOGOUT_REDIRECT_URL = 'login'
 # D5: impressora térmica Zebra ZT421, RAW ZPL via socket TCP/IP na porta 9100.
 # [ASSUMPTION] host de desenvolvimento provisório até existir um cadastro de equipamentos.
 # Valores hardcoded abaixo são só o fallback de dev — configuráveis via .env (ver .env.example).
-IMPRESSORA_ZPL_HOST = os.environ.get('IMPRESSORA_ZPL_HOST', '10.61.1.19')
-IMPRESSORA_ZPL_PORT = int(os.environ.get('IMPRESSORA_ZPL_PORT', '9100'))
+IMPRESSORA_ZPL_HOST = os.environ.get('IMPRESSORA_ZPL_HOST')
+IMPRESSORA_ZPL_PORT = int(os.environ.get('IMPRESSORA_ZPL_PORT'))
 
 # D8: Z-API (WhatsApp Business API) — notifica o Gestor de Logística por WhatsApp
 # quando um lote é aprovado, substituindo o aviso manual hoje feito por grupos de
 # WhatsApp (ver docs/PRD.md linha 27).
-# [ASSUMPTION] credenciais e número de destino são placeholders de desenvolvimento até
-# existir conta Z-API contratada e o número real do Gestor de logística.
-# Valores hardcoded abaixo são só o fallback de dev — configuráveis via .env (ver .env.example).
-ZAPI_INSTANCE_ID = os.environ.get('ZAPI_INSTANCE_ID', '3DE71D53DC14B00B4C2E8E66062CE0C1')
-ZAPI_TOKEN = os.environ.get('ZAPI_TOKEN', '7636AD593B1A24783FB16794')
-# Header "Client-Token" (segurança de conta Z-API, distinto do token da URL acima) —
-# sem valor de dev conhecido; precisa ser definido via .env para a notificação funcionar de fato.
+# Sem valores reais hardcoded aqui — credenciais e número de destino vêm só do
+# .env (ver .env.example).
+ZAPI_INSTANCE_ID = os.environ.get('ZAPI_INSTANCE_ID', '')
+ZAPI_TOKEN = os.environ.get('ZAPI_TOKEN', '')
+# Header "Client-Token" (segurança de conta Z-API, distinto do token da URL acima).
 ZAPI_CLIENT_TOKEN = os.environ.get('ZAPI_CLIENT_TOKEN', '')
 ZAPI_LOGISTICA_WHATSAPP_NUMBER = os.environ.get(
-    'ZAPI_LOGISTICA_WHATSAPP_NUMBER', '5562991926068'
+    'ZAPI_LOGISTICA_WHATSAPP_NUMBER', ''
 )  # DDI+DDD+número, sem símbolos
 
 
 # LDAP/Active Directory — autenticação corporativa via django-auth-ldap.
-# [ASSUMPTION] sem servidor LDAP real disponível em desenvolvimento: todas as
-# variáveis abaixo são placeholders vazios até alguém com acesso ao AD
-# preencher o .env (ver .env.example). python-ldap (dependência C de
-# django-auth-ldap) não tem wheel oficial pra Windows — o import é protegido
-# para que o projeto continue rodando via ModelBackend (usuários locais/demo)
-# mesmo sem o pacote instalado nesta máquina.
+# Servidor e domínio do AD são configuráveis via .env (AUTH_LDAP_SERVER_URI,
+# AUTH_LDAP_USER_SEARCH_BASE, AUTH_LDAP_GROUP_SEARCH_BASE) — sem host/domínio
+# real hardcoded aqui. python-ldap (dependência C de django-auth-ldap) não tem
+# wheel oficial pra Windows — o import é protegido para que o projeto continue
+# rodando via ModelBackend (usuários locais/demo) mesmo sem o pacote instalado
+# na máquina.
 try:
     import ldap
     from django_auth_ldap.config import GroupOfNamesType, LDAPSearch
@@ -158,9 +160,38 @@ except ImportError:
 AUTHENTICATION_BACKENDS = ['django.contrib.auth.backends.ModelBackend']
 
 if _LDAP_DISPONIVEL:
+    # O AD deste ambiente recusa bind simples em texto puro (porta 389, com ou sem
+    # StartTLS) — exige LDAPS (porta 636). Certificado do AD é emitido pela CA interna
+    # sitio-GOLD-CA (autoassinada) e a interface web de certsrv do servidor está
+    # retornando 500, então não foi possível obter o certificado raiz da CA para
+    # validação da cadeia nesta sessão.
+    # [PENDENTE DE SEGURANÇA] OPT_X_TLS_NEVER desliga a validação do certificado TLS do
+    # AD (aceita qualquer certificado apresentado pelo servidor, sem checar a cadeia) —
+    # decisão explícita do usuário para destravar o teste de login LDAP sem depender do
+    # TI/infra agora. Deve ser substituído por OPT_X_TLS_CACERTFILE apontando para o
+    # certificado real da CA assim que ele puder ser obtido (ver CLAUDE.md).
+    ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
+    # Sem isto, o AD retorna um referral (LDAP_REFERRAL) em toda busca no
+    # AUTH_LDAP_USER_SEARCH/GROUP_SEARCH, que python-ldap não segue por padrão e faz o
+    # bind da conexão de busca parecer inválido mesmo já autenticado (erro genérico do
+    # AD: "a successful bind must be completed on the connection"). AUTH_LDAP_GLOBAL_OPTIONS
+    # é o hook do django-auth-ldap para aplicar a opção em toda conexão que ele cria.
+    AUTH_LDAP_GLOBAL_OPTIONS = {ldap.OPT_REFERRALS: 0}
+
     AUTH_LDAP_SERVER_URI = os.environ.get('AUTH_LDAP_SERVER_URI', '')
-    AUTH_LDAP_BIND_DN = os.environ.get('AUTH_LDAP_BIND_DN', '')
-    AUTH_LDAP_BIND_PASSWORD = os.environ.get('AUTH_LDAP_BIND_PASSWORD', '')
+    # user_ad/senha_ad: nomes já usados no .env deste projeto para a conta de
+    # bind do AD; AUTH_LDAP_BIND_DN/PASSWORD continuam aceitos como alternativa
+    # (padrão django-auth-ldap), com prioridade se ambos estiverem definidos.
+    # AUTH_LDAP_BIND_USER_DOMAIN monta o UPN (usuario@dominio) quando o AD exige
+    # esse formato para bind simples — sem domínio real hardcoded aqui.
+    _ldap_bind_user = os.environ.get('AUTH_LDAP_BIND_DN') or os.environ.get('user_ad', '')
+    _ldap_bind_user_domain = os.environ.get('AUTH_LDAP_BIND_USER_DOMAIN', '')
+    AUTH_LDAP_BIND_DN = (
+        f'{_ldap_bind_user}@{_ldap_bind_user_domain}'
+        if _ldap_bind_user and _ldap_bind_user_domain and '@' not in _ldap_bind_user
+        else _ldap_bind_user
+    )
+    AUTH_LDAP_BIND_PASSWORD = os.environ.get('AUTH_LDAP_BIND_PASSWORD') or os.environ.get('senha_ad', '')
 
     _ldap_user_search_base = os.environ.get('AUTH_LDAP_USER_SEARCH_BASE', '')
     _ldap_group_search_base = os.environ.get('AUTH_LDAP_GROUP_SEARCH_BASE', '')
@@ -173,13 +204,40 @@ if _LDAP_DISPONIVEL:
             _ldap_group_search_base, ldap.SCOPE_SUBTREE, '(objectClass=group)',
         )
         AUTH_LDAP_GROUP_TYPE = GroupOfNamesType()
-        # AUTH_LDAP_MIRROR_GROUPS cria/sincroniza os grupos Django a cada login
-        # LDAP com base no atributo `cn` do grupo AD — o `cn` real no AD precisa
-        # bater com os 5 nomes de apps/core/migrations/0002_migrar_grupos_por_setor.py,
-        # senão será necessário um passo de mapeamento adicional (TODO futuro,
-        # dependente dos nomes reais de grupo do AD, ainda desconhecidos).
-        AUTH_LDAP_MIRROR_GROUPS = True
-        AUTH_LDAP_FIND_GROUP_PERMS = True
+
+        # Mapeamento explícito DN do grupo AD -> nome(s) do(s) grupo(s) Django, em vez
+        # de AUTH_LDAP_MIRROR_GROUPS (que criaria um auth.Group por `cn` do AD — não
+        # bate com os 5 nomes de apps/core/migrations/0002_migrar_grupos_por_setor.py
+        # a menos que o AD tenha grupos com esses nomes exatos). O mapeamento de fato é
+        # aplicado pelo receiver do sinal populate_user em apps/core/ldap_signals.py.
+        # Cada AUTH_LDAP_GROUP_DN_* fica vazia até alguém com acesso ao AD preencher o
+        # .env com o DN real do grupo correspondente (ver .env.example) — grupo sem DN
+        # configurado nunca é atribuído automaticamente.
+        #
+        # [TRANSIÇÃO] o AD hoje só tem 3 grupos "guarda-chuva" por área (Logística,
+        # Produção, Tecnologia da Informação) — a equipe de TI ainda vai criar
+        # subgrupos Operador/Gestor por área no AD. Até lá, cada DN de área mapeia para
+        # os DOIS grupos Django daquele setor (Operador + Gestor), dando acesso total
+        # ao setor; "Tecnologia da Informação" mapeia para Administradores. Quando os
+        # subgrupos existirem, basta preencher as variáveis AUTH_LDAP_GROUP_DN_OPERADOR_*/
+        # GESTOR_* no .env com os DNs reais deles para refinar o acesso, sem mexer aqui.
+        _grupo_dn_por_papel = {
+            'AUTH_LDAP_GROUP_DN_ADMINISTRADORES': ['Administradores'],
+            'AUTH_LDAP_GROUP_DN_OPERADOR_PRODUCAO': ['Operador Produção'],
+            'AUTH_LDAP_GROUP_DN_OPERADOR_LOGISTICA': ['Operador Logística'],
+            'AUTH_LDAP_GROUP_DN_GESTOR_PRODUCAO': ['Gestor Produção'],
+            'AUTH_LDAP_GROUP_DN_GESTOR_LOGISTICA': ['Gestor Logística'],
+            'AUTH_LDAP_GROUP_DN_PRODUCAO': ['Operador Produção', 'Gestor Produção'],
+            'AUTH_LDAP_GROUP_DN_LOGISTICA': ['Operador Logística', 'Gestor Logística'],
+        }
+        AUTH_LDAP_GROUP_DN_MAP = {}
+        for env_var, nomes_grupo in _grupo_dn_por_papel.items():
+            dn = os.environ.get(env_var)
+            if dn:
+                AUTH_LDAP_GROUP_DN_MAP.setdefault(dn, []).extend(nomes_grupo)
+
+        AUTH_LDAP_MIRROR_GROUPS = False
+        AUTH_LDAP_FIND_GROUP_PERMS = False
 
         AUTHENTICATION_BACKENDS = [
             'django_auth_ldap.backend.LDAPBackend',
