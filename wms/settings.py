@@ -312,7 +312,8 @@ STORAGES = {
 
 # Segurança adicional para produção (DEBUG=False). Tráfego do WMS é interno
 # (LAN do armazém), então HSTS/SSL redirect ficam desligados por padrão — ativar
-# via DJANGO_SECURE_SSL_REDIRECT=True se um dia houver HTTPS na frente (Nginx/IIS).
+# via DJANGO_SECURE_SSL_REDIRECT=True quando houver HTTPS na frente (ver
+# deploy/Caddyfile e docs/https-setup.md).
 if not DEBUG:
     _csrf_trusted = os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '')
     CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_trusted.split(',') if o.strip()]
@@ -324,3 +325,11 @@ if not DEBUG:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_SSL_REDIRECT
     SECURE_HSTS_PRELOAD = SECURE_SSL_REDIRECT
     X_FRAME_OPTIONS = 'DENY'
+
+    # Waitress serve WSGI puro em HTTP; o TLS é terminado no proxy reverso (Caddy)
+    # e repassado internamente como HTTP. Sem isto, request.is_secure() do Django
+    # veria sempre HTTP (mesmo com o navegador em HTTPS) e SECURE_SSL_REDIRECT
+    # entraria num loop infinito de redirect. Só ligar se o proxy na frente de
+    # fato define X-Forwarded-Proto (o Caddyfile em deploy/ já faz isso).
+    if _bool_env('DJANGO_USE_X_FORWARDED_PROTO', False):
+        SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

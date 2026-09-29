@@ -9,7 +9,6 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.core.decorators import group_required
-from apps.estoque.models import Produto
 
 from .forms import RecebimentoForm
 from .models import Palete, PaleteHistorico, registrar_historico
@@ -28,7 +27,7 @@ def receber_palete(request):
             produto = form.cleaned_data['produto']
             lote = form.cleaned_data['lote']
             quantidade = form.cleaned_data['quantidade']
-            peso_kg = form.cleaned_data['peso_kg'] if produto.peso_variavel else PESO_FIXO_RECEBIMENTO_KG
+            peso_kg = form.cleaned_data['peso_kg'] if form.cleaned_data['peso_variavel'] else PESO_FIXO_RECEBIMENTO_KG
 
             paletes = [
                 Palete(sku=produto.sku, descricao=produto.descricao, lote=lote, peso_kg=peso_kg)
@@ -53,13 +52,7 @@ def receber_palete(request):
     else:
         form = RecebimentoForm()
 
-    produtos_peso_variavel_ids = list(
-        Produto.objects.filter(ativo=True, peso_variavel=True).values_list('id', flat=True)
-    )
-    return render(request, 'recebimento/receber_palete.html', {
-        'form': form,
-        'produtos_peso_variavel_ids': produtos_peso_variavel_ids,
-    })
+    return render(request, 'recebimento/receber_palete.html', {'form': form})
 
 
 def _bipar_para_transferencia(request, barcode):

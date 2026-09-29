@@ -1,0 +1,175 @@
+@import "tailwindcss";
+
+/* Tailwind CSS v4 (CLI standalone, sem Node/npm) — configuração via CSS-first
+   (@theme, @source), sem tailwind.config.js. Ver deploy/tailwind/README.md. */
+@source "../../apps/**/templates/**/*.html";
+
+@theme {
+  /* Verde de marca ("Café do Sítio"), escala 50-900 a partir de #1d4e45 (primary-600). */
+  --color-primary-50: #eef5f3;
+  --color-primary-100: #d7e8e3;
+  --color-primary-200: #b0d1c8;
+  --color-primary-300: #82b3a5;
+  --color-primary-400: #57937f;
+  --color-primary-500: #256359;
+  --color-primary-600: #1d4e45;
+  --color-primary-700: #183f38;
+  --color-primary-800: #13312c;
+  --color-primary-900: #0e2622;
+
+  --color-success-50: #e9f4ed;
+  --color-success-500: #2f7a4f;
+  --color-success-600: #256340;
+
+  --color-warning-50: #fdf1de;
+  --color-warning-500: #a86a10;
+  --color-warning-600: #87560d;
+
+  --color-danger-50: #fbeae7;
+  --color-danger-500: #ad3b2c;
+  --color-danger-600: #8c3024;
+
+  --radius-DEFAULT: 6px;
+  --font-sans: Arial, Helvetica, sans-serif;
+}
+
+/*
+ * Referência rápida de tokens:
+ *   - primary-{50..900}: verde de marca (#1d4e45 = primary-600)
+ *   - success/warning/danger-{50,500,600}: estados semânticos
+ *   - slate-*: neutros (fundo, texto secundário, bordas) — escala nativa do Tailwind
+ *   - rounded (DEFAULT): 6px, padrão em todo o projeto
+ *
+ * Duas densidades de UI, por convenção de uso de classes (não por token separado):
+ *   - "coletor" (telas do Zebra MC2700): texto e alvos de toque grandes — text-lg/xl, py-3/4
+ *   - "dashboard" (desktop/tablet): mais denso — text-sm/base, py-1.5/2
+ */
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-800 font-sans antialiased;
+  }
+  h1 {
+    @apply text-xl font-semibold text-slate-900;
+  }
+  h2 {
+    @apply text-lg font-semibold text-primary-700;
+  }
+  h3 {
+    @apply text-base font-semibold text-slate-700;
+  }
+  label {
+    @apply block text-sm font-medium text-slate-700 mb-1.5;
+  }
+}
+
+@layer components {
+  /* Navegação da sidebar */
+  .nav-link {
+    @apply flex items-center gap-3 px-5 py-2.5 text-white/85 border-l-4 border-transparent
+           transition-colors duration-150 hover:bg-white/10 hover:text-white;
+  }
+  .nav-link-ativo {
+    @apply bg-white/10 text-white font-semibold border-l-4 border-white;
+  }
+  .nav-icon {
+    @apply inline-flex items-center justify-center w-5 shrink-0 text-base leading-none;
+  }
+
+  /* Botões */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded px-4 py-2 text-sm font-medium
+           bg-primary-600 text-white transition-colors duration-150
+           hover:bg-primary-700 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed;
+  }
+  .btn-block {
+    @apply flex w-full;
+  }
+  .btn-lg {
+    @apply text-lg py-3.5 px-6;
+  }
+  .btn-secondary {
+    @apply bg-white text-primary-700 border border-slate-300 hover:bg-slate-50;
+  }
+  .btn-danger {
+    @apply bg-white text-danger-600 border border-danger-500 hover:bg-danger-50;
+  }
+
+  /* Campos de formulário */
+  .input-field {
+    @apply block w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800
+           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500;
+  }
+  .input-field-lg {
+    @apply text-lg py-3 px-4;
+  }
+
+  /* Cartões */
+  .card {
+    @apply bg-white border border-slate-200 border-l-4 border-l-primary-600 rounded p-4 mb-4;
+  }
+  .card-plain {
+    @apply bg-white border border-slate-200 rounded p-4;
+  }
+
+  /* Selos / badges de status */
+  .badge-success {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide
+           bg-success-50 text-success-600 border border-success-500;
+  }
+  .badge-danger {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide
+           bg-danger-50 text-danger-600 border border-danger-500;
+  }
+  .badge-warning {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide
+           bg-warning-50 text-warning-600 border border-warning-500;
+  }
+
+  /* Alertas */
+  .alert-error {
+    @apply rounded border px-3 py-2.5 text-sm font-medium mb-4 bg-danger-50 text-danger-600 border-danger-500;
+  }
+  .alert-success {
+    @apply rounded border px-3 py-2.5 text-sm font-medium mb-4 bg-success-50 text-success-600 border-success-500;
+  }
+
+  /* Tabelas administrativas */
+  .table-admin {
+    @apply w-full border-collapse bg-white text-sm;
+  }
+  .table-admin th, .table-admin td {
+    @apply border border-slate-200 px-3 py-2 text-left;
+  }
+  .table-admin th {
+    @apply bg-primary-600 text-white font-semibold sticky top-0 z-10;
+  }
+
+  /* Contadores de bipagem */
+  .contador-zerado {
+    @apply inline-block rounded-full px-4 py-1 font-bold whitespace-nowrap bg-danger-50 text-danger-600 border border-danger-500;
+  }
+  .contador-parcial {
+    @apply inline-block rounded-full px-4 py-1 font-bold whitespace-nowrap bg-warning-50 text-warning-600 border border-warning-500;
+  }
+  .contador-completo {
+    @apply inline-block rounded-full px-4 py-1 font-bold whitespace-nowrap bg-success-50 text-success-600 border border-success-500;
+  }
+
+  /* Níveis de ocupação da grade de endereços */
+  .nivel-vazio {
+    @apply bg-slate-100 text-slate-500;
+  }
+  .nivel-baixo {
+    @apply bg-emerald-100;
+  }
+  .nivel-medio {
+    @apply bg-amber-100;
+  }
+  .nivel-alto {
+    @apply bg-orange-200;
+  }
+  .nivel-cheio {
+    @apply bg-rose-200;
+  }
+}

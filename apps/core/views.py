@@ -2,7 +2,9 @@ from collections import Counter
 from datetime import date
 
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import Group
 from django.core.paginator import Paginator
 from django.db.models import Count, Sum
 from django.db.models.functions import TruncDate
@@ -10,11 +12,15 @@ from django.shortcuts import redirect, render
 
 from apps.recebimento.models import Palete, PaleteHistorico, registrar_historico
 
+from .constants import GRUPOS_INATIVOS_POR_PADRAO
 from .decorators import group_required
-from .forms import ReautenticacaoForm
+from .forms import AtribuicaoUsuarioADForm, ReautenticacaoForm
+from .ldap_lookup import AREAS_AD, LdapIndisponivelError, listar_membros_sem_usuario
+from .models import PerfilUsuario
 
 ITENS_POR_PAGINA_CONFIRMACAO = 20
 TOP_N_PRODUTOS_GRAFICO = 15
+PAPEL_PARA_GRUPO = {'GESTOR': 'grupo_gestor', 'COLABORADOR': 'grupo_colaborador'}
 
 
 @login_required
@@ -48,6 +54,97 @@ def confirmar_armazenagem(request):
     return render(request, 'core/confirmar_armazenagem.html', {
         'form': form,
         'paletes': pagina_paletes,
+    })
+
+
+@group_required('Administradores')
+def atribuir_usuario_ad(request):
+    """Lista membros dos grupos guarda-chuva do AD (Produção/Logística) que
+    ainda não têm usuário no WMS e permite ao Administrador criar o usuário
+    já definindo o papel (Gestor ou Colaborador) — necessário porque o AD
+    ainda não distingue os dois papéis dentro do mesmo grupo (ver
+    [TRANSIÇÃO] em wms/settings.py)."""
+    area_selecionada = request.GET.get('area', 'PRODUCAO')
+    if area_selecionada not in AREAS_AD:
+        area_selecionada = 'PRODUCAO'
+
+    if request.method == 'POST':
+        form = AtribuicaoUsuarioADForm(request.POST)
+        if form.is_valid():
+            area = form.cleaned_data['area']
+            username = form.cleaned_data['username']
+            nome = form.cleaned_data['nome']
+            papel = form.cleaned_data['papel']
+            nome_grupo = AREAS_AD[area][PAPEL_PARA_GRUPO[papel]]
+
+            User = get_user_model()
+            if User.objects.filter(username=username).exists():
+                messages.error(request, f'O usuário "{username}" já existe no WMS.')
+            else:
+                partes_nome = nome.split(' ', 1)
+                usuario = User.objects.create_user(
+                    username=username,
+                    first_name=partes_nome[0],
+                    last_name=partes_nome[1] if len(partes_nome) > 1 else '',
+                )
+                usuario.set_unusable_password()  # autenticação continua via LDAP
+                # Nasce inativo — Produção/Logística exigem ativação manual por um
+                # Administrador (tela "Ativar Usuários") antes de conseguir logar.
+                usuario.is_active = False
+                usuario.save()
+                PerfilUsuario.objects.create(user=usuario, atribuido_manualmente=True)
+                grupo = Group.objects.get(name=nome_grupo)
+                usuario.groups.add(grupo)
+                messages.success(
+                    request,
+                    f'"{nome}" atribuído como {nome_grupo}. Usuário criado inativo — '
+                    f'ative-o em "Ativar Usuários" antes que ele possa acessar o sistema.',
+                )
+            return redirect(f"{request.path}?area={area}")
+    else:
+        form = AtribuicaoUsuarioADForm(initial={'area': area_selecionada})
+
+    erro_ldap = None
+    membros_pendentes = []
+    try:
+        membros_pendentes = listar_membros_sem_usuario(area_selecionada)
+    except LdapIndisponivelError as exc:
+        erro_ldap = str(exc)
+
+    return render(request, 'core/atribuir_usuario_ad.html', {
+        'form': form,
+        'areas': AREAS_AD,
+        'area_selecionada': area_selecionada,
+        'membros_pendentes': membros_pendentes,
+        'erro_ldap': erro_ldap,
+    })
+
+
+@group_required('Administradores')
+def ativar_usuarios(request):
+    """Lista usuários dos grupos de Produção/Logística que nasceram inativos
+    (criados manualmente ou via primeiro login LDAP, ver GRUPOS_INATIVOS_POR_PADRAO
+    em ldap_signals.py) e permite a um Administrador ativá-los, liberando o
+    acesso ao WMS."""
+    User = get_user_model()
+
+    if request.method == 'POST':
+        usuario = User.objects.filter(pk=request.POST.get('usuario_id'), is_active=False).first()
+        if usuario:
+            usuario.is_active = True
+            usuario.save(update_fields=['is_active'])
+            messages.success(request, f'"{usuario.get_full_name() or usuario.username}" foi ativado e já pode acessar o WMS.')
+        return redirect('ativar_usuarios')
+
+    usuarios_pendentes = (
+        User.objects.filter(is_active=False, groups__name__in=GRUPOS_INATIVOS_POR_PADRAO)
+        .distinct()
+        .prefetch_related('groups')
+        .order_by('first_name', 'last_name', 'username')
+    )
+
+    return render(request, 'core/ativar_usuarios.html', {
+        'usuarios_pendentes': usuarios_pendentes,
     })
 
 

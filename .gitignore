@@ -10,3 +10,4 @@ media/
 .vscode/
 manage.py
 CLAUDE.md
+deploy/

@@ -1,112 +1,108 @@
-{% extends 'base.html' %}
+{% extends 'core/_shell_coletor.html' %}
 
 {% block title %}Transferência — WMS{% endblock %}
+{% block titulo_pagina_coletor %}Transferência: Produção{% endblock %}
+{% block largura_coletor %}max-w-3xl{% endblock %}
 
-{% block content %}
-<div class="topbar">
-    <strong>Transferência: Produção</strong>
-    <a href="{% url 'home' %}">Início</a>
+{% block shell_content_coletor %}
+{% for mensagem in messages %}
+    <p class="{% if mensagem.tags == 'error' %}alert-error{% else %}alert-success{% endif %} text-lg">{{ mensagem }}</p>
+{% endfor %}
+
+{% if pode_bipar %}
+<form method="post" autocomplete="off" class="mb-5">
+    {% csrf_token %}
+    <label for="id_barcode_palete" class="text-base">Barcode do Palete</label>
+    <input type="text" name="barcode_palete" id="id_barcode_palete" class="input-field input-field-lg mb-3" autofocus autocomplete="off" required>
+    <button type="submit" class="btn btn-block btn-lg">Confirmar</button>
+</form>
+{% endif %}
+
+{% if grupos %}
+<div class="flex flex-wrap gap-4 text-xs text-slate-500 mb-4">
+    <span class="inline-flex items-center gap-1.5"><span class="w-4 h-4 rounded border border-danger-500 bg-danger-50 inline-block"></span> Pendente / nenhum bipado</span>
+    <span class="inline-flex items-center gap-1.5"><span class="w-4 h-4 rounded border border-warning-500 bg-warning-50 inline-block"></span> Incompleto</span>
+    <span class="inline-flex items-center gap-1.5"><span class="w-4 h-4 rounded border border-success-500 bg-success-50 inline-block"></span> Concluído</span>
 </div>
-<div class="container">
-
-    {% for mensagem in messages %}
-        <p class="{% if mensagem.tags == 'error' %}erro{% else %}ok{% endif %}">{{ mensagem }}</p>
-    {% endfor %}
-
-    {% if pode_bipar %}
-    <form method="post" autocomplete="off">
-        {% csrf_token %}
-        <label for="id_barcode_palete">Barcode do Palete</label>
-        <input type="text" name="barcode_palete" id="id_barcode_palete" autofocus autocomplete="off" required>
-        <button type="submit">Confirmar</button>
-    </form>
-    {% endif %}
-
-    {% if grupos %}
-    <div class="legenda">
-        <span><span class="amostra cor-erro"></span> Pendente / nenhum bipado</span>
-        <span><span class="amostra cor-alerta"></span> Incompleto</span>
-        <span><span class="amostra cor-ok"></span> Concluído</span>
-    </div>
-    {% for grupo in grupos %}
-        <div class="cartao">
-            <div class="cartao-cabecalho">
-                <div>
-                    <p><strong>Lote:</strong> {{ grupo.lote }} — {{ grupo.descricao }}</p>
-                    <p><strong>N° de etiquetas criadas:</strong> {{ grupo.total_lote }}</p>
-                    <p><strong>Peso total:</strong> {{ grupo.peso_total }} kg</p>
-                </div>
-                <p class="contador-bipagem
-                    {% if grupo.quantidade == 0 %}contador-zerado
-                    {% elif grupo.pendentes_bipagem %}contador-parcial
-                    {% else %}contador-completo{% endif %}">
-                    {% if not grupo.pendentes_bipagem %}✓ {% endif %}{{ grupo.quantidade }}/{{ grupo.total_lote }}
-                </p>
+{% for grupo in grupos %}
+    <div class="card">
+        <div class="flex justify-between items-start gap-3 flex-wrap">
+            <div>
+                <p class="text-sm text-slate-700 mb-1"><strong>Lote:</strong> {{ grupo.lote }} — {{ grupo.descricao }}</p>
+                <p class="text-sm text-slate-700 mb-1"><strong>N° de etiquetas criadas:</strong> {{ grupo.total_lote }}</p>
+                <p class="text-sm text-slate-700"><strong>Peso total:</strong> {{ grupo.peso_total }} kg</p>
             </div>
-            <details>
-                <summary>Ver barcodes</summary>
-                <ul>
-                    {% for p in grupo.paletes %}
-                        <li>
-                            <span class="barcode-item">{{ p.barcode_palete }} — {{ p.peso_kg }} kg</span>
-                            {% if p.estado == 'EM_TRANSFERENCIA' %}
-                                <span class="selo-status selo-concluido">Concluído</span>
-                            {% else %}
-                                <span class="selo-status selo-pendente">Pendente</span>
-                            {% endif %}
-                        </li>
-                    {% endfor %}
-                </ul>
-            </details>
-            {% if pode_aprovar %}
-            <form method="post">
-                {% csrf_token %}
-                <button type="submit" name="aprovar_lote" value="{{ grupo.lote }}" {% if grupo.pendentes_bipagem %}disabled{% endif %}>
-                    Aprovar Lote
-                </button>
-            </form>
+            <p class="{% if grupo.quantidade == 0 %}contador-zerado{% elif grupo.pendentes_bipagem %}contador-parcial{% else %}contador-completo{% endif %} text-xl">
+                {% if not grupo.pendentes_bipagem %}✓ {% endif %}{{ grupo.quantidade }}/{{ grupo.total_lote }}
+            </p>
+        </div>
+        <details class="mt-3">
+            <summary class="cursor-pointer font-semibold text-sm">Ver barcodes</summary>
+            <ul class="list-none mt-2 pl-0 text-sm space-y-1.5">
+                {% for p in grupo.paletes %}
+                    <li class="flex items-center gap-2 flex-wrap">
+                        <span>{{ p.barcode_palete }} — {{ p.peso_kg }} kg</span>
+                        {% if p.estado == 'EM_TRANSFERENCIA' %}
+                            <span class="badge-success">Concluído</span>
+                        {% else %}
+                            <span class="badge-danger">Pendente</span>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        </details>
+        {% if pode_aprovar %}
+        <form method="post" class="mt-3">
+            {% csrf_token %}
+            <button type="submit" name="aprovar_lote" value="{{ grupo.lote }}" class="btn btn-block" {% if grupo.pendentes_bipagem %}disabled{% endif %}>
+                Aprovar Lote
+            </button>
+        </form>
+        {% endif %}
+    </div>
+{% endfor %}
+{% endif %}
+
+{% if pode_aprovar %}
+<details class="mb-4">
+    <summary class="btn inline-flex cursor-pointer">Gerar Relatório de Aprovação</summary>
+    <form method="get" class="flex flex-wrap items-end gap-3 mt-3 mb-3">
+        <div>
+            <label for="id_data_relatorio">Data de aprovação</label>
+            <input type="date" name="data_relatorio" id="id_data_relatorio" class="input-field" value="{{ data_relatorio|date:'Y-m-d' }}">
+        </div>
+        <button type="submit" class="btn">Buscar</button>
+    </form>
+    <form method="post">
+        {% csrf_token %}
+        <div class="card-plain">
+            {% if lotes_data_relatorio %}
+            <p class="text-sm text-slate-600 mb-2">Selecione os lotes aprovados em {{ data_relatorio|date:'d/m/Y' }} que devem entrar no relatório:</p>
+            <ul class="list-none pl-0 text-sm space-y-1 mb-3">
+                {% for lote in lotes_data_relatorio %}<li><label class="inline-flex items-center gap-2 font-normal"><input type="checkbox" name="lote_relatorio" value="{{ lote }}"> {{ lote }}</label></li>{% endfor %}
+            </ul>
+            <button type="submit" name="gerar_relatorio" value="1" class="btn">Gerar Relatório</button>
+            {% else %}
+            <p class="text-sm text-slate-500">Nenhum lote aprovado em {{ data_relatorio|date:'d/m/Y' }}.</p>
             {% endif %}
         </div>
-    {% endfor %}
-    {% endif %}
+    </form>
+</details>
+{% endif %}
 
-    {% if pode_aprovar %}
-    <details class="painel-relatorio">
-        <summary class="btn">Gerar Relatório de Aprovação</summary>
-        <form method="get">
-            <label for="id_data_relatorio">Data de aprovação</label>
-            <input type="date" name="data_relatorio" id="id_data_relatorio" value="{{ data_relatorio|date:'Y-m-d' }}">
-            <button type="submit">Buscar</button>
-        </form>
-        <form method="post">
-            {% csrf_token %}
-            <div class="cartao">
-                {% if lotes_data_relatorio %}
-                <p>Selecione os lotes aprovados em {{ data_relatorio|date:'d/m/Y' }} que devem entrar no relatório:</p>
-                <ul>{% for lote in lotes_data_relatorio %}<li><label><input type="checkbox" name="lote_relatorio" value="{{ lote }}"> {{ lote }}</label></li>{% endfor %}</ul>
-                <button type="submit" name="gerar_relatorio" value="1">Gerar Relatório</button>
-                {% else %}
-                <p>Nenhum lote aprovado em {{ data_relatorio|date:'d/m/Y' }}.</p>
-                {% endif %}
-            </div>
-        </form>
-    </details>
+{% if grupos.paginator.num_pages > 1 %}
+<div class="flex items-center gap-3">
+    {% if grupos.has_previous %}
+        <a class="btn btn-secondary" href="?page={{ grupos.previous_page_number }}">« Anterior</a>
+    {% else %}
+        <span class="btn opacity-50 cursor-not-allowed bg-slate-300">« Anterior</span>
     {% endif %}
-
-    {% if grupos.paginator.num_pages > 1 %}
-    <div class="paginacao">
-        {% if grupos.has_previous %}
-            <a class="btn" href="?page={{ grupos.previous_page_number }}">« Anterior</a>
-        {% else %}
-            <span class="btn-disabled">« Anterior</span>
-        {% endif %}
-        <span class="pagina-atual">Página {{ grupos.number }} de {{ grupos.paginator.num_pages }}</span>
-        {% if grupos.has_next %}
-            <a class="btn" href="?page={{ grupos.next_page_number }}">Próxima »</a>
-        {% else %}
-            <span class="btn-disabled">Próxima »</span>
-        {% endif %}
-    </div>
+    <span class="text-sm text-slate-500 whitespace-nowrap">Página {{ grupos.number }} de {{ grupos.paginator.num_pages }}</span>
+    {% if grupos.has_next %}
+        <a class="btn btn-secondary" href="?page={{ grupos.next_page_number }}">Próxima »</a>
+    {% else %}
+        <span class="btn opacity-50 cursor-not-allowed bg-slate-300">Próxima »</span>
     {% endif %}
 </div>
+{% endif %}
 {% endblock %}

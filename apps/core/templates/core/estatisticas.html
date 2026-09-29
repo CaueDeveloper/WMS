@@ -1,78 +1,72 @@
-{% extends 'base.html' %}
+{% extends 'core/_shell.html' %}
 
 {% block title %}Estatísticas — WMS{% endblock %}
+{% block titulo_pagina %}Estatísticas{% endblock %}
+{% block nav_ativo_estatisticas %}nav-link-ativo{% endblock %}
 
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {% endblock %}
 
-{% block content %}
-<div class="topbar">
-    <strong>Estatísticas</strong>
-    <a href="{% url 'home' %}">Início</a>
-</div>
-<div class="container-amplo pagina-estatisticas">
-    <h1>Estatísticas do WMS</h1>
+{% block shell_content %}
+<form method="get" id="form-filtros-estatisticas" onsubmit="return false;">
+    <section class="card-plain mb-6">
+        <h2 class="mb-3">Paletes Criados</h2>
+        <div class="flex flex-wrap items-center gap-3">
+            <label for="criados_de" class="mb-0 font-normal text-xs text-slate-500">De</label>
+            <input type="date" id="criados_de" name="criados_de" class="input-field w-auto" value="{{ criados_de }}">
+            <label for="criados_ate" class="mb-0 font-normal text-xs text-slate-500">Até</label>
+            <input type="date" id="criados_ate" name="criados_ate" class="input-field w-auto" value="{{ criados_ate }}">
+            <label for="criados_sku" class="mb-0 font-normal text-xs text-slate-500">Produto</label>
+            <select id="criados_sku" name="criados_sku" class="input-field w-auto">
+                <option value="">Todos</option>
+                {% for produto in produtos_disponiveis %}
+                <option value="{{ produto.sku }}" {% if produto.sku == criados_sku %}selected{% endif %}>{{ produto.sku }} — {{ produto.descricao }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </section>
 
-    <form method="get" id="form-filtros-estatisticas" onsubmit="return false;">
-        <section class="secao-estatistica">
-            <h2>Paletes Criados</h2>
-            <div class="filtro-periodo">
-                <label for="criados_de">De</label>
-                <input type="date" id="criados_de" name="criados_de" value="{{ criados_de }}">
-                <label for="criados_ate">Até</label>
-                <input type="date" id="criados_ate" name="criados_ate" value="{{ criados_ate }}">
-                <label for="criados_sku">Produto</label>
-                <select id="criados_sku" name="criados_sku">
-                    <option value="">Todos</option>
-                    {% for produto in produtos_disponiveis %}
-                    <option value="{{ produto.sku }}" {% if produto.sku == criados_sku %}selected{% endif %}>{{ produto.sku }} — {{ produto.descricao }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-        </section>
+    {% if pode_ver_producao %}
+    <section class="card-plain mb-6">
+        <h2 class="mb-3">Lotes Aprovados — Transferência da Produção</h2>
+        <div class="flex flex-wrap items-center gap-3">
+            <label for="producao_de" class="mb-0 font-normal text-xs text-slate-500">De</label>
+            <input type="date" id="producao_de" name="producao_de" class="input-field w-auto" value="{{ producao_de }}">
+            <label for="producao_ate" class="mb-0 font-normal text-xs text-slate-500">Até</label>
+            <input type="date" id="producao_ate" name="producao_ate" class="input-field w-auto" value="{{ producao_ate }}">
+            <label for="producao_sku" class="mb-0 font-normal text-xs text-slate-500">Produto</label>
+            <select id="producao_sku" name="producao_sku" class="input-field w-auto">
+                <option value="">Todos</option>
+                {% for produto in produtos_disponiveis %}
+                <option value="{{ produto.sku }}" {% if produto.sku == producao_sku %}selected{% endif %}>{{ produto.sku }} — {{ produto.descricao }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </section>
+    {% endif %}
 
-        {% if pode_ver_producao %}
-        <section class="secao-estatistica">
-            <h2>Lotes Aprovados — Transferência da Produção</h2>
-            <div class="filtro-periodo">
-                <label for="producao_de">De</label>
-                <input type="date" id="producao_de" name="producao_de" value="{{ producao_de }}">
-                <label for="producao_ate">Até</label>
-                <input type="date" id="producao_ate" name="producao_ate" value="{{ producao_ate }}">
-                <label for="producao_sku">Produto</label>
-                <select id="producao_sku" name="producao_sku">
-                    <option value="">Todos</option>
-                    {% for produto in produtos_disponiveis %}
-                    <option value="{{ produto.sku }}" {% if produto.sku == producao_sku %}selected{% endif %}>{{ produto.sku }} — {{ produto.descricao }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-        </section>
-        {% endif %}
+    {% if pode_ver_logistica %}
+    <section class="card-plain mb-6">
+        <h2 class="mb-3">Lotes Aprovados — Transferência da Logística</h2>
+        <div class="flex flex-wrap items-center gap-3">
+            <label for="logistica_de" class="mb-0 font-normal text-xs text-slate-500">De</label>
+            <input type="date" id="logistica_de" name="logistica_de" class="input-field w-auto" value="{{ logistica_de }}">
+            <label for="logistica_ate" class="mb-0 font-normal text-xs text-slate-500">Até</label>
+            <input type="date" id="logistica_ate" name="logistica_ate" class="input-field w-auto" value="{{ logistica_ate }}">
+            <label for="logistica_sku" class="mb-0 font-normal text-xs text-slate-500">Produto</label>
+            <select id="logistica_sku" name="logistica_sku" class="input-field w-auto">
+                <option value="">Todos</option>
+                {% for produto in produtos_disponiveis %}
+                <option value="{{ produto.sku }}" {% if produto.sku == logistica_sku %}selected{% endif %}>{{ produto.sku }} — {{ produto.descricao }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </section>
+    {% endif %}
+</form>
 
-        {% if pode_ver_logistica %}
-        <section class="secao-estatistica">
-            <h2>Lotes Aprovados — Transferência da Logística</h2>
-            <div class="filtro-periodo">
-                <label for="logistica_de">De</label>
-                <input type="date" id="logistica_de" name="logistica_de" value="{{ logistica_de }}">
-                <label for="logistica_ate">Até</label>
-                <input type="date" id="logistica_ate" name="logistica_ate" value="{{ logistica_ate }}">
-                <label for="logistica_sku">Produto</label>
-                <select id="logistica_sku" name="logistica_sku">
-                    <option value="">Todos</option>
-                    {% for produto in produtos_disponiveis %}
-                    <option value="{{ produto.sku }}" {% if produto.sku == logistica_sku %}selected{% endif %}>{{ produto.sku }} — {{ produto.descricao }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-        </section>
-        {% endif %}
-    </form>
-
-    {% include 'core/_resultados_estatisticas.html' %}
-</div>
+{% include 'core/_resultados_estatisticas.html' %}
 {% endblock %}
 
 {% block extra_js %}

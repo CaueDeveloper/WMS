@@ -1,0 +1,65 @@
+{% extends 'core/_shell.html' %}
+
+{% block title %}Atribuir Usuário do AD — WMS{% endblock %}
+{% block titulo_pagina %}Atribuir Usuário do AD{% endblock %}
+{% block nav_ativo_atribuir_ad %}nav-link-ativo{% endblock %}
+
+{% block shell_content %}
+<p class="text-sm text-slate-500 mb-4">Usuários dos grupos de Produção/Logística no Active Directory que ainda não têm acesso ao WMS.</p>
+
+{% for mensagem in messages %}
+    <p class="{% if mensagem.tags == 'error' %}alert-error{% else %}alert-success{% endif %}">{{ mensagem }}</p>
+{% endfor %}
+
+<div class="flex flex-wrap gap-2 mb-5">
+    {% for chave, dados in areas.items %}
+        {% if chave == area_selecionada %}
+            <span class="btn">{{ dados.label }}</span>
+        {% else %}
+            <a class="btn btn-secondary" href="?area={{ chave }}">{{ dados.label }}</a>
+        {% endif %}
+    {% endfor %}
+</div>
+
+{% if erro_ldap %}
+    <p class="alert-error">Não foi possível consultar o AD: {{ erro_ldap }}</p>
+{% elif not membros_pendentes %}
+    <p class="text-sm text-slate-500">Nenhum usuário pendente de atribuição nesta área.</p>
+{% else %}
+    <div class="overflow-x-auto">
+    <table class="table-admin">
+        <thead>
+            <tr>
+                <th>Nome</th>
+                <th>Usuário (AD)</th>
+                <th>Papel</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for membro in membros_pendentes %}
+            <tr>
+                <td>{{ membro.nome }}</td>
+                <td>{{ membro.username }}</td>
+                <td>
+                    <select name="papel" form="form-{{ membro.username }}" class="input-field w-auto py-1.5">
+                        <option value="COLABORADOR">Colaborador</option>
+                        <option value="GESTOR">Gestor</option>
+                    </select>
+                </td>
+                <td>
+                    <form method="post" id="form-{{ membro.username }}">
+                        {% csrf_token %}
+                        <input type="hidden" name="area" value="{{ area_selecionada }}">
+                        <input type="hidden" name="username" value="{{ membro.username }}">
+                        <input type="hidden" name="nome" value="{{ membro.nome }}">
+                    </form>
+                    <button type="submit" form="form-{{ membro.username }}" class="btn rounded px-3 py-1.5 text-xs">Atribuir</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% endif %}
+{% endblock %}

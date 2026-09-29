@@ -1,6 +1,6 @@
-{% if titulo %}<h3 class="titulo-grade">{{ titulo }}</h3>{% endif %}
-<div class="scroll-x">
-<table class="mapa-estoque">
+{% if titulo %}<h3 class="titulo-grade text-primary-700 text-sm font-semibold mb-2">{{ titulo }}</h3>{% endif %}
+<div class="overflow-x-auto mb-6">
+<table class="table-admin">
     <thead>
         <tr>
             <th>Andar</th>
@@ -14,32 +14,32 @@
             {% for celula in linha.celulas %}
                 {% if celula %}
                     {% if clicavel and celula.disponivel %}
-                        <td class="cel-endereco-btn">
-                            <button type="submit" class="btn-endereco nivel-{{ celula.nivel }}"
+                        <td class="p-0">
+                            <button type="submit" class="btn-endereco nivel-{{ celula.nivel }} block w-full h-full m-0 px-2 py-1.5 text-xs font-semibold text-center leading-tight text-slate-800 hover:brightness-95"
                                     name="codigo_endereco" value="{{ celula.endereco.codigo }}">
                                 {{ celula.endereco.codigo }}
-                                <small>{{ celula.endereco.ocupacao_atual }}/{{ celula.endereco.capacidade }}</small>
+                                <small class="block font-normal">{{ celula.endereco.ocupacao_atual }}/{{ celula.endereco.capacidade }}</small>
                             </button>
                         </td>
                     {% elif link_endereco %}
-                        <td class="cel-endereco-btn">
-                            <a class="btn-endereco nivel-{{ celula.nivel }}"
+                        <td class="p-0">
+                            <a class="btn-endereco nivel-{{ celula.nivel }} block w-full h-full px-2 py-1.5 text-xs font-semibold text-center leading-tight text-slate-800 no-underline hover:brightness-95"
                                href="{{ link_endereco }}?modo=endereco&codigo_endereco={{ celula.endereco.codigo|urlencode }}">
                                 {{ celula.endereco.codigo }}
-                                <small>{{ celula.endereco.ocupacao_atual }}/{{ celula.endereco.capacidade }}</small>
+                                <small class="block font-normal">{{ celula.endereco.ocupacao_atual }}/{{ celula.endereco.capacidade }}</small>
                             </a>
                         </td>
                     {% else %}
-                        <td class="cel-endereco nivel-{{ celula.nivel }}{% if clicavel %} indisponivel{% endif %}{% if celula.eh_destino %} destino-caminho{% elif celula.eh_inicio %} inicio-caminho{% elif celula.no_caminho %} no-caminho{% endif %}">
+                        <td class="nivel-{{ celula.nivel }} text-center text-xs font-semibold leading-tight px-2 py-1.5{% if clicavel %} opacity-55 cursor-not-allowed{% endif %}{% if celula.eh_destino %} border-2 border-danger-500 bg-danger-50{% elif celula.eh_inicio %} border-2 border-primary-600 bg-primary-100{% elif celula.no_caminho %} border-2 border-primary-600 bg-primary-50{% endif %}">
                             {{ celula.endereco.codigo }}
-                            <small>{{ celula.endereco.ocupacao_atual }}/{{ celula.endereco.capacidade }}</small>
-                            {% if celula.eh_inicio %}<small class="marcador-rota">● Início</small>{% endif %}
-                            {% if celula.eh_destino %}<small class="marcador-rota">★ Destino</small>{% endif %}
-                            {% if celula.no_caminho and not celula.eh_destino %}<small class="seta-rota" aria-hidden="true">↓</small>{% endif %}
+                            <small class="block font-normal">{{ celula.endereco.ocupacao_atual }}/{{ celula.endereco.capacidade }}</small>
+                            {% if celula.eh_inicio %}<small class="block font-bold text-primary-700">● Início</small>{% endif %}
+                            {% if celula.eh_destino %}<small class="block font-bold text-danger-600">★ Destino</small>{% endif %}
+                            {% if celula.no_caminho and not celula.eh_destino %}<small class="block font-bold text-primary-700" aria-hidden="true">↓</small>{% endif %}
                         </td>
                     {% endif %}
                 {% else %}
-                    <td class="cel-endereco nivel-vazio">—</td>
+                    <td class="nivel-vazio text-center text-xs px-2 py-1.5">—</td>
                 {% endif %}
             {% endfor %}
         </tr>

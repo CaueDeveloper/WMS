@@ -3,19 +3,27 @@
 {% block title %}Login — WMS Café do Sítio{% endblock %}
 
 {% block content %}
-<div class="container">
-    <h1>Café do Sítio · WMS</h1>
-    {% if form.errors %}
-        <p class="erro">Usuário ou senha inválidos.</p>
-    {% endif %}
-    <form method="post">
-        {% csrf_token %}
-        <label for="id_username">Usuário</label>
-        <input type="text" name="username" id="id_username" autofocus autocomplete="username" required>
-        <label for="id_password">Senha</label>
-        <input type="password" name="password" id="id_password" autocomplete="current-password" required>
-        <button type="submit">Entrar</button>
-        <input type="hidden" name="next" value="{{ next }}">
-    </form>
+<div class="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+    <div class="w-full max-w-sm">
+        <h1 class="text-center text-lg font-semibold text-slate-900 mb-6">Café do Sítio · WMS</h1>
+        <div class="card-plain">
+            {% if form.non_field_errors %}
+                {% for erro in form.non_field_errors %}
+                    <p class="alert-error">{{ erro }}</p>
+                {% endfor %}
+            {% elif form.errors %}
+                <p class="alert-error">Usuário ou senha inválidos.</p>
+            {% endif %}
+            <form method="post">
+                {% csrf_token %}
+                <label for="id_username">Usuário</label>
+                <input type="text" name="username" id="id_username" class="input-field mb-4" autofocus autocomplete="username" required>
+                <label for="id_password">Senha</label>
+                <input type="password" name="password" id="id_password" class="input-field mb-4" autocomplete="current-password" required>
+                <button type="submit" class="btn btn-block">Entrar</button>
+                <input type="hidden" name="next" value="{{ next }}">
+            </form>
+        </div>
+    </div>
 </div>
 {% endblock %}

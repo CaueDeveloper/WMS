@@ -12,10 +12,18 @@ from django.conf import settings
 from django.contrib.auth.models import Group
 from django_auth_ldap.backend import populate_user
 
+from .constants import GRUPOS_INATIVOS_POR_PADRAO
+
 
 def _mapear_grupos_ldap(sender, user, ldap_user, **kwargs):
     mapa = getattr(settings, 'AUTH_LDAP_GROUP_DN_MAP', None)
     if not mapa:
+        return
+
+    if user.pk and getattr(user, 'perfil', None) and user.perfil.atribuido_manualmente:
+        # Grupo definido manualmente pelo Administrador (tela de atribuição do
+        # AD) — não sobrescrever com o mapeamento automático (que daria
+        # Operador+Gestor juntos, ver comentário [TRANSIÇÃO] em settings.py).
         return
 
     dns_do_usuario = {dn.lower() for dn in ldap_user.group_dns}
@@ -26,7 +34,11 @@ def _mapear_grupos_ldap(sender, user, ldap_user, **kwargs):
         for nome in nomes
     }
 
-    if not user.pk:
+    usuario_novo = not user.pk
+    if usuario_novo and nomes_dos_grupos & GRUPOS_INATIVOS_POR_PADRAO:
+        user.is_active = False
+
+    if usuario_novo:
         user.save()
 
     grupos_mapeados = {nome for nomes in mapa.values() for nome in nomes}

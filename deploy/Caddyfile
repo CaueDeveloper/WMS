@@ -1,0 +1,29 @@
+# Proxy reverso HTTPS para o WMS (Waitress rodando em 127.0.0.1:8000).
+#
+# Certificado: autoassinado, gerado e renovado automaticamente pelo próprio
+# Caddy (CA interna local, não é o sitio-GOLD-CA). Navegadores vão acusar
+# "conexão não é segura" até o certificado raiz do Caddy ser instalado nas
+# máquinas clientes (ver docs/https-setup.md) — o tráfego já vai criptografado
+# mesmo com o aviso. Trocar por um certificado real assim que o certsrv da
+# CA interna voltar (ver comentário [PENDENTE DE SEGURANÇA] em wms/settings.py
+# — mesma pendência, dois certificados diferentes: um é o do AD/LDAPS, este
+# aqui é o do site HTTPS do WMS).
+#
+# Ajuste os hosts abaixo para o IP/hostname real do servidor
+# (mesmos valores de DJANGO_ALLOWED_HOSTS no .env). Vários hosts podem
+# compartilhar o mesmo bloco (separados por espaço) quando apontam para o
+# mesmo servidor — ex.: IP da LAN + hostname DNS interno.
+https://192.168.1.120 https://wms.cafedositio.com.br {
+	tls internal
+
+	reverse_proxy 127.0.0.1:8000 {
+		header_up X-Forwarded-Proto {scheme}
+	}
+
+	encode gzip
+}
+
+# Redireciona HTTP -> HTTPS (evita expor a versão sem TLS na mesma porta 80).
+http://192.168.1.120 http://wms.cafedositio.com.br {
+	redir https://{host}{uri} permanent
+}

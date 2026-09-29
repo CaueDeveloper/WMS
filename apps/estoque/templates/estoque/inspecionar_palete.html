@@ -1,51 +1,46 @@
-{% extends 'base.html' %}
+{% extends 'core/_shell.html' %}
 
 {% block title %}Inspecionar Palete — WMS{% endblock %}
+{% block titulo_pagina %}Inspecionar Palete{% endblock %}
+{% block nav_ativo_mapa %}nav-link-ativo{% endblock %}
+{% block voltar_link %}<a href="{% url 'estoque:mapa_estoque' %}" class="text-sm text-slate-500 hover:text-primary-700 shrink-0">« Mapa de Estoque</a>{% endblock %}
 
-{% block content %}
-<div class="topbar">
-    <strong>Inspecionar Palete</strong>
-    <a href="{% url 'estoque:mapa_estoque' %}">Voltar ao Mapa de Estoque</a>
+{% block shell_content %}
+<div class="card max-w-xl mb-6">
+    <p class="font-semibold text-slate-800 mb-1">{{ palete.barcode_palete }}</p>
+    <p class="text-sm text-slate-600 mb-1">SKU: {{ palete.sku }} — Lote: {{ palete.lote }}</p>
+    <p class="text-sm text-slate-600 mb-1">{{ palete.descricao }}</p>
+    <p class="text-sm text-slate-600 mb-1">Status atual: <strong class="text-slate-800">{{ palete.get_estado_display }}</strong></p>
+    <p class="text-sm text-slate-600 mb-1">Endereço atual: {{ palete.endereco.codigo|default:"—" }}</p>
+    {% if palete.aprovado_producao_em %}<p class="text-sm text-slate-600 mb-1">Aprovado na Produção: {{ palete.aprovado_producao_em|date:"d/m/Y H:i" }}</p>{% endif %}
+    {% if palete.aprovado_logistica_em %}<p class="text-sm text-slate-600 mb-1">Aprovado na Logística: {{ palete.aprovado_logistica_em|date:"d/m/Y H:i" }}</p>{% endif %}
+    {% if palete.armazenado_em %}<p class="text-sm text-slate-600 mb-1">Armazenado em: {{ palete.armazenado_em|date:"d/m/Y H:i" }}</p>{% endif %}
+    {% if palete.retirado_em %}<p class="text-sm text-slate-600">Retirado em: {{ palete.retirado_em|date:"d/m/Y H:i" }}</p>{% endif %}
 </div>
-<div class="container-amplo">
-    <h1>Inspecionar Palete</h1>
 
-    <div class="cartao">
-        <p><strong>{{ palete.barcode_palete }}</strong></p>
-        <p>SKU: {{ palete.sku }} — Lote: {{ palete.lote }}</p>
-        <p>{{ palete.descricao }}</p>
-        <p>Status atual: <strong>{{ palete.get_estado_display }}</strong></p>
-        <p>Endereço atual: {{ palete.endereco.codigo|default:"—" }}</p>
-        {% if palete.aprovado_producao_em %}<p>Aprovado na Produção: {{ palete.aprovado_producao_em|date:"d/m/Y H:i" }}</p>{% endif %}
-        {% if palete.aprovado_logistica_em %}<p>Aprovado na Logística: {{ palete.aprovado_logistica_em|date:"d/m/Y H:i" }}</p>{% endif %}
-        {% if palete.armazenado_em %}<p>Armazenado em: {{ palete.armazenado_em|date:"d/m/Y H:i" }}</p>{% endif %}
-        {% if palete.retirado_em %}<p>Retirado em: {{ palete.retirado_em|date:"d/m/Y H:i" }}</p>{% endif %}
-    </div>
-
-    <h2>Fluxo — Da Criação até a Etapa Atual</h2>
-    {% if not historico %}
-        <p>Nenhum evento registrado para este palete.</p>
-    {% else %}
-    <div class="scroll-x">
-        <table class="tabela-guardas">
-            <thead>
-                <tr>
-                    <th>Etapa</th>
-                    <th>Data/Hora</th>
-                    <th>Usuário</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for evento in historico %}
-                <tr>
-                    <td>{{ evento.get_estado_display }}</td>
-                    <td>{{ evento.criado_em|date:"d/m/Y H:i" }}</td>
-                    <td>{{ evento.usuario.username|default:"—" }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% endif %}
+<h2 class="mb-3">Fluxo — Da Criação até a Etapa Atual</h2>
+{% if not historico %}
+    <p class="text-sm text-slate-500">Nenhum evento registrado para este palete.</p>
+{% else %}
+<div class="overflow-x-auto">
+    <table class="table-admin">
+        <thead>
+            <tr>
+                <th>Etapa</th>
+                <th>Data/Hora</th>
+                <th>Usuário</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for evento in historico %}
+            <tr>
+                <td>{{ evento.get_estado_display }}</td>
+                <td>{{ evento.criado_em|date:"d/m/Y H:i" }}</td>
+                <td>{{ evento.usuario.username|default:"—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
+{% endif %}
 {% endblock %}
