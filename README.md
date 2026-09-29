@@ -320,7 +320,6 @@ IMPRESSORA_ZPL_PORT = 9100              # Porta TCP/IP
 ## 📞 Contato
 
 - **Desenvolvedor:** Cauê Silva ([@CaueSilvS](https://github.com/CaueSilvS))
-- **Email:** sluizcampos2019@gmail.com
 
 ## 📄 Licença
 
