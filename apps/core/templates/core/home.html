@@ -6,7 +6,7 @@
 
 {% block shell_content %}
 <div class="max-w-xl">
-    <h2 class="mb-1">Bem-vindo, {{ user.username }}</h2>
+    <h2 class="mb-1">Bem-vindo, {{ user.get_full_name|default:user.username }}</h2>
     <p class="text-sm text-slate-500">
         Grupos: {% for g in user.groups.all %}{{ g.name }}{% if not forloop.last %}, {% endif %}{% empty %}Nenhum{% endfor %}
     </p>

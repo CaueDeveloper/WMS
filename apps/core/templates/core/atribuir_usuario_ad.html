@@ -5,61 +5,124 @@
 {% block nav_ativo_atribuir_ad %}nav-link-ativo{% endblock %}
 
 {% block shell_content %}
-<p class="text-sm text-slate-500 mb-4">Usuários dos grupos de Produção/Logística no Active Directory que ainda não têm acesso ao WMS.</p>
-
-{% for mensagem in messages %}
-    <p class="{% if mensagem.tags == 'error' %}alert-error{% else %}alert-success{% endif %}">{{ mensagem }}</p>
-{% endfor %}
-
-<div class="flex flex-wrap gap-2 mb-5">
-    {% for chave, dados in areas.items %}
-        {% if chave == area_selecionada %}
-            <span class="btn">{{ dados.label }}</span>
-        {% else %}
-            <a class="btn btn-secondary" href="?area={{ chave }}">{{ dados.label }}</a>
-        {% endif %}
+<div class="max-w-xl mx-auto mt-6">
+    {% for mensagem in messages %}
+        <p class="{% if mensagem.tags == 'error' %}alert-error{% else %}alert-success{% endif %}">{{ mensagem }}</p>
     {% endfor %}
+
+    <form method="post" id="form-atribuir" class="form-card">
+        {% csrf_token %}
+        {{ form.username }}
+        {{ form.nome }}
+
+        <header class="form-card-header">
+            <h2 class="form-card-title">Cadastro de Usuário</h2>
+            <p class="form-card-subtitle">Vincule um usuário do Active Directory a um grupo de acesso do WMS.</p>
+        </header>
+
+        <div class="form-card-body">
+            <div class="relative">
+                <label for="busca-ad" >Usuário do AD</label>
+                <input type="text" id="busca-ad" class="input-field py-2.5" autocomplete="off" autofocus placeholder="Nome ou login">
+                <ul id="resultados-ad" class="hidden absolute z-10 mt-1 w-full max-h-64 overflow-auto rounded border border-slate-200 bg-white shadow-lg divide-y divide-slate-100"></ul>
+                <p id="status-ad" class="text-xs text-slate-500 mt-1.5 min-h-4"></p>
+            </div>
+
+            <div>
+                <label for="{{ form.grupo.id_for_label }}" >{{ form.grupo.label }} de acesso</label>
+                {{ form.grupo }}
+                {% for erro in form.grupo.errors %}<p class="alert-error mt-2">{{ erro }}</p>{% endfor %}
+            </div>
+        </div>
+
+        <footer class="form-card-footer">
+            <button type="submit" id="btn-atribuir" class="btn px-8 py-2.5" disabled>Atribuir</button>
+        </footer>
+    </form>
 </div>
 
-{% if erro_ldap %}
-    <p class="alert-error">Não foi possível consultar o AD: {{ erro_ldap }}</p>
-{% elif not membros_pendentes %}
-    <p class="text-sm text-slate-500">Nenhum usuário pendente de atribuição nesta área.</p>
-{% else %}
-    <div class="overflow-x-auto">
-    <table class="table-admin">
-        <thead>
-            <tr>
-                <th>Nome</th>
-                <th>Usuário (AD)</th>
-                <th>Papel</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for membro in membros_pendentes %}
-            <tr>
-                <td>{{ membro.nome }}</td>
-                <td>{{ membro.username }}</td>
-                <td>
-                    <select name="papel" form="form-{{ membro.username }}" class="input-field w-auto py-1.5">
-                        <option value="COLABORADOR">Colaborador</option>
-                        <option value="GESTOR">Gestor</option>
-                    </select>
-                </td>
-                <td>
-                    <form method="post" id="form-{{ membro.username }}">
-                        {% csrf_token %}
-                        <input type="hidden" name="area" value="{{ area_selecionada }}">
-                        <input type="hidden" name="username" value="{{ membro.username }}">
-                        <input type="hidden" name="nome" value="{{ membro.nome }}">
-                    </form>
-                    <button type="submit" form="form-{{ membro.username }}" class="btn rounded px-3 py-1.5 text-xs">Atribuir</button>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    </div>
-{% endif %}
+<script>
+(function () {
+    const busca = document.getElementById('busca-ad');
+    const lista = document.getElementById('resultados-ad');
+    const status = document.getElementById('status-ad');
+    const botao = document.getElementById('btn-atribuir');
+    const campoUsername = document.getElementById('{{ form.username.id_for_label }}');
+    const campoNome = document.getElementById('{{ form.nome.id_for_label }}');
+    const url = "{% url 'buscar_usuarios_ad' %}";
+    let temporizador = null;
+    let controlador = null;
+
+    function limparSelecao() {
+        campoUsername.value = '';
+        campoNome.value = '';
+        botao.disabled = true;
+    }
+
+    function esconderLista() {
+        lista.classList.add('hidden');
+        lista.replaceChildren();
+    }
+
+    function selecionar(usuario) {
+        campoUsername.value = usuario.username;
+        campoNome.value = usuario.nome;
+        busca.value = usuario.nome + ' (' + usuario.username + ')';
+        botao.disabled = false;
+        status.textContent = '';
+        esconderLista();
+    }
+
+    function mostrar(usuarios) {
+        lista.replaceChildren();
+        usuarios.forEach(function (usuario) {
+            const item = document.createElement('li');
+            item.className = 'px-3 py-2 cursor-pointer hover:bg-slate-100 text-sm';
+            item.textContent = usuario.nome + ' (' + usuario.username + ')';
+            item.addEventListener('mousedown', function (evento) {
+                evento.preventDefault();
+                selecionar(usuario);
+            });
+            lista.appendChild(item);
+        });
+        lista.classList.toggle('hidden', usuarios.length === 0);
+    }
+
+    async function pesquisar(termo) {
+        if (controlador) controlador.abort();
+        controlador = new AbortController();
+        status.textContent = 'Buscando...';
+        try {
+            const resposta = await fetch(url + '?q=' + encodeURIComponent(termo), {
+                signal: controlador.signal,
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+            });
+            const dados = await resposta.json();
+            if (dados.erro) {
+                status.textContent = dados.erro;
+                esconderLista();
+                return;
+            }
+            status.textContent = dados.usuarios.length ? '' : 'Nenhum usuário encontrado (ou já cadastrado no WMS).';
+            mostrar(dados.usuarios);
+        } catch (erro) {
+            if (erro.name !== 'AbortError') status.textContent = 'Falha ao consultar o AD.';
+        }
+    }
+
+    busca.addEventListener('input', function () {
+        limparSelecao();
+        clearTimeout(temporizador);
+        const termo = busca.value.trim();
+        if (termo.length < 2) {
+            status.textContent = '';
+            esconderLista();
+            return;
+        }
+        temporizador = setTimeout(function () { pesquisar(termo); }, 300);
+    });
+
+    busca.addEventListener('blur', esconderLista);
+})();
+</script>
 {% endblock %}

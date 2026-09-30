@@ -24,41 +24,45 @@
 
     <p class="mb-4"><a class="btn btn-secondary btn-block" href="{% url 'estoque:putaway' %}">Cancelar / escolher outro lote</a></p>
 
-    <h2 class="text-lg mb-3">Escolha o Endereço</h2>
+    <h2 class="text-lg mb-3">Escolha o Corredor</h2>
     {% if sem_vagas %}
-        <p class="alert-error text-base">Não há nenhuma vaga livre no armazém no momento — nenhum endereço pode
+        <p class="alert-error text-base">Não há nenhuma vaga livre no armazém no momento — nenhuma posição pode
         receber paletes. Retire paletes do mapa ou libere endereços antes de continuar.</p>
     {% elif modo_parcial %}
         <div class="card mb-4">
-            <p class="font-semibold text-slate-800 mb-1">Este lote não cabe inteiro em nenhum endereço.</p>
-            <p class="text-sm text-slate-600">Restam {{ quantidade }} palete(s). Clique em um endereço: ele será preenchido
-            com quantos paletes couberem — os primeiros da lista "Ver barcodes" acima — e o
-            restante continuará pendente. Repita a escolha até o lote acabar.</p>
+            <p class="font-semibold text-slate-800 mb-1">Este lote não cabe inteiro em nenhum corredor.</p>
+            <p class="text-sm text-slate-600">Restam {{ quantidade }} palete(s). Clique em um corredor: ele será preenchido,
+            a partir da primeira posição livre, com quantos paletes couberem — os primeiros da lista "Ver barcodes" acima — e o
+            restante continuará pendente. Repita a escolha (no mesmo andar ou em outro) até o lote acabar.</p>
         </div>
     {% else %}
-        <p class="text-base text-slate-600 mb-4">Clique em um endereço disponível para armazenar os {{ quantidade }} palete(s) do lote de uma vez.</p>
+        <p class="text-base text-slate-600 mb-4">Clique em um corredor disponível para armazenar os {{ quantidade }} palete(s) do lote, cada um numa posição livre, a partir da primeira.</p>
     {% endif %}
-    <div class="flex flex-wrap justify-center gap-4 text-xs text-slate-500 mb-4">
-        <span class="inline-flex items-center gap-1.5"><span class="nivel-vazio w-4 h-4 rounded border border-slate-300 inline-block"></span> Vazio</span>
-        <span class="inline-flex items-center gap-1.5"><span class="nivel-baixo w-4 h-4 rounded border border-slate-300 inline-block"></span> &lt; 30%</span>
-        <span class="inline-flex items-center gap-1.5"><span class="nivel-medio w-4 h-4 rounded border border-slate-300 inline-block"></span> 30–69%</span>
-        <span class="inline-flex items-center gap-1.5"><span class="nivel-alto w-4 h-4 rounded border border-slate-300 inline-block"></span> 70–99%</span>
-        <span class="inline-flex items-center gap-1.5"><span class="nivel-cheio w-4 h-4 rounded border border-slate-300 inline-block"></span> Cheio (100%)</span>
-    </div>
+    {% include 'estoque/_filtro_andar.html' %}
+    {% include 'estoque/_legenda_grade.html' %}
 
     <form method="post" autocomplete="off">
         {% csrf_token %}
         <input type="hidden" name="lote" value="{{ lote }}">
+        <input type="hidden" name="andar" value="{{ andar }}">
         {% include 'estoque/_grade_enderecos.html' with titulo=grade_titulo clicavel=True %}
     </form>
 {% else %}
-    <form method="post" autocomplete="off">
+    <form method="post" autocomplete="off" class="form-card">
         {% csrf_token %}
-        <div id="linha-lote" class="mb-4">
-            <label for="id_barcode_palete" class="text-base">Barcode</label>
-            <input type="text" name="barcode_palete" id="id_barcode_palete" class="input-field input-field-lg" autofocus autocomplete="off" required>
+        <header class="form-card-header">
+            <h2 class="form-card-title">Armazenagem</h2>
+            <p class="form-card-subtitle">Bipe um palete para localizar o lote a ser armazenado.</p>
+        </header>
+        <div class="form-card-body">
+            <div id="linha-lote">
+                <label for="id_barcode_palete" class="text-base">Barcode</label>
+                <input type="text" name="barcode_palete" id="id_barcode_palete" class="input-field input-field-lg" autofocus autocomplete="off" required>
+            </div>
         </div>
-        <button type="submit" class="btn btn-block btn-lg">Buscar</button>
+        <footer class="form-card-footer">
+            <button type="submit" class="btn btn-block btn-lg">Buscar</button>
+        </footer>
     </form>
 
     {% if paletes_pendentes %}

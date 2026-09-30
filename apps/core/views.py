@@ -5,22 +5,20 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group
-from django.core.paginator import Paginator
 from django.db.models import Count, Sum
 from django.db.models.functions import TruncDate
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
 
-from apps.recebimento.models import Palete, PaleteHistorico, registrar_historico
+from apps.recebimento.models import Palete, PaleteHistorico
 
 from .constants import GRUPOS_INATIVOS_POR_PADRAO
 from .decorators import group_required
-from .forms import AtribuicaoUsuarioADForm, ReautenticacaoForm
-from .ldap_lookup import AREAS_AD, LdapIndisponivelError, listar_membros_sem_usuario
+from .forms import AtribuicaoUsuarioADForm
+from .ldap_lookup import LdapIndisponivelError, buscar_usuarios_ad
 from .models import PerfilUsuario
 
-ITENS_POR_PAGINA_CONFIRMACAO = 20
 TOP_N_PRODUTOS_GRAFICO = 15
-PAPEL_PARA_GRUPO = {'GESTOR': 'grupo_gestor', 'COLABORADOR': 'grupo_colaborador'}
 
 
 @login_required
@@ -28,54 +26,28 @@ def home(request):
     return render(request, 'core/home.html')
 
 
-@group_required('Administradores', 'Operador Logística')
-def confirmar_armazenagem(request):
-    # Sempre a queryset completa (não paginada) — o .update() abaixo precisa afetar
-    # todos os paletes ARMAZENADO, nunca só a página exibida no GET.
-    paletes_armazenados = Palete.objects.filter(estado='ARMAZENADO').select_related('endereco').order_by('endereco__codigo')
-
-    if request.method == 'POST':
-        form = ReautenticacaoForm(request.POST)
-        if form.is_valid() and request.user.check_password(form.cleaned_data['senha']):
-            paletes_a_finalizar = list(paletes_armazenados)
-            atualizados = paletes_armazenados.update(estado='FINALIZADO')
-            registrar_historico(paletes_a_finalizar, 'FINALIZADO', usuario=request.user)
-            messages.success(
-                request,
-                f'{atualizados} palete(s) confirmado(s) e sincronizado(s) com o SAP B1.',
-            )
-            return redirect('confirmar_armazenagem')
-        messages.error(request, 'Senha inválida. Autorização não concedida.')
-    else:
-        form = ReautenticacaoForm()
-
-    pagina_paletes = Paginator(paletes_armazenados, ITENS_POR_PAGINA_CONFIRMACAO).get_page(request.GET.get('page'))
-
-    return render(request, 'core/confirmar_armazenagem.html', {
-        'form': form,
-        'paletes': pagina_paletes,
-    })
+@group_required('Administradores')
+def buscar_usuarios_ad_json(request):
+    """Autocomplete da tela de atribuição: usuários do AD (todos) que casam
+    com `?q=` e ainda não têm usuário no WMS."""
+    try:
+        usuarios = buscar_usuarios_ad(request.GET.get('q', ''))
+    except LdapIndisponivelError as exc:
+        return JsonResponse({'erro': str(exc), 'usuarios': []})
+    return JsonResponse({'usuarios': usuarios})
 
 
 @group_required('Administradores')
 def atribuir_usuario_ad(request):
-    """Lista membros dos grupos guarda-chuva do AD (Produção/Logística) que
-    ainda não têm usuário no WMS e permite ao Administrador criar o usuário
-    já definindo o papel (Gestor ou Colaborador) — necessário porque o AD
-    ainda não distingue os dois papéis dentro do mesmo grupo (ver
-    [TRANSIÇÃO] em wms/settings.py)."""
-    area_selecionada = request.GET.get('area', 'PRODUCAO')
-    if area_selecionada not in AREAS_AD:
-        area_selecionada = 'PRODUCAO'
-
+    """Permite ao Administrador buscar qualquer usuário do AD (digitando) e
+    criar o usuário no WMS já definindo o grupo — necessário porque o AD
+    ainda não distingue os papéis (ver [TRANSIÇÃO] em wms/settings.py)."""
     if request.method == 'POST':
         form = AtribuicaoUsuarioADForm(request.POST)
         if form.is_valid():
-            area = form.cleaned_data['area']
             username = form.cleaned_data['username']
             nome = form.cleaned_data['nome']
-            papel = form.cleaned_data['papel']
-            nome_grupo = AREAS_AD[area][PAPEL_PARA_GRUPO[papel]]
+            nome_grupo = form.cleaned_data['grupo']
 
             User = get_user_model()
             if User.objects.filter(username=username).exists():
@@ -100,24 +72,11 @@ def atribuir_usuario_ad(request):
                     f'"{nome}" atribuído como {nome_grupo}. Usuário criado inativo — '
                     f'ative-o em "Ativar Usuários" antes que ele possa acessar o sistema.',
                 )
-            return redirect(f"{request.path}?area={area}")
+            return redirect(request.path)
     else:
-        form = AtribuicaoUsuarioADForm(initial={'area': area_selecionada})
+        form = AtribuicaoUsuarioADForm()
 
-    erro_ldap = None
-    membros_pendentes = []
-    try:
-        membros_pendentes = listar_membros_sem_usuario(area_selecionada)
-    except LdapIndisponivelError as exc:
-        erro_ldap = str(exc)
-
-    return render(request, 'core/atribuir_usuario_ad.html', {
-        'form': form,
-        'areas': AREAS_AD,
-        'area_selecionada': area_selecionada,
-        'membros_pendentes': membros_pendentes,
-        'erro_ldap': erro_ldap,
-    })
+    return render(request, 'core/atribuir_usuario_ad.html', {'form': form})
 
 
 @group_required('Administradores')

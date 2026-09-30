@@ -50,9 +50,6 @@
             <a href="{% url 'estoque:plano_armazenagem' %}" class="nav-link {% block nav_ativo_plano %}{% endblock %}">
                 <span class="nav-icon">➜</span> Plano de Armazenagem
             </a>
-            <a href="{% url 'confirmar_armazenagem' %}" class="nav-link {% block nav_ativo_confirmar %}{% endblock %}">
-                <span class="nav-icon">✓</span> Confirmar Armazenagem
-            </a>
             {% endif %}
 
             {% if user|em_algum_grupo:"Administradores,Gestor Produção,Gestor Logística" %}

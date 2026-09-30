@@ -6,24 +6,34 @@
 <div class="min-h-screen flex items-center justify-center bg-slate-50 px-4">
     <div class="w-full max-w-sm">
         <h1 class="text-center text-lg font-semibold text-slate-900 mb-6">Café do Sítio · WMS</h1>
-        <div class="card-plain">
-            {% if form.non_field_errors %}
-                {% for erro in form.non_field_errors %}
-                    <p class="alert-error">{{ erro }}</p>
-                {% endfor %}
-            {% elif form.errors %}
-                <p class="alert-error">Usuário ou senha inválidos.</p>
-            {% endif %}
-            <form method="post">
-                {% csrf_token %}
-                <label for="id_username">Usuário</label>
-                <input type="text" name="username" id="id_username" class="input-field mb-4" autofocus autocomplete="username" required>
-                <label for="id_password">Senha</label>
-                <input type="password" name="password" id="id_password" class="input-field mb-4" autocomplete="current-password" required>
+        <form method="post" class="form-card">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next }}">
+            <header class="form-card-header">
+                <h2 class="form-card-title">Acesso ao Sistema</h2>
+                <p class="form-card-subtitle">Entre com seu usuário e senha.</p>
+            </header>
+            <div class="form-card-body">
+                {% if form.non_field_errors %}
+                    {% for erro in form.non_field_errors %}
+                        <p class="alert-error mb-0">{{ erro }}</p>
+                    {% endfor %}
+                {% elif form.errors %}
+                    <p class="alert-error mb-0">Usuário ou senha inválidos.</p>
+                {% endif %}
+                <div>
+                    <label for="id_username">Usuário</label>
+                    <input type="text" name="username" id="id_username" class="input-field" autofocus autocomplete="username" required>
+                </div>
+                <div>
+                    <label for="id_password">Senha</label>
+                    <input type="password" name="password" id="id_password" class="input-field" autocomplete="current-password" required>
+                </div>
+            </div>
+            <footer class="form-card-footer">
                 <button type="submit" class="btn btn-block">Entrar</button>
-                <input type="hidden" name="next" value="{{ next }}">
-            </form>
-        </div>
+            </footer>
+        </form>
     </div>
 </div>
 {% endblock %}

@@ -1,0 +1,10 @@
+<div class="flex flex-wrap items-center gap-2 mb-4">
+    <span class="text-sm font-medium text-slate-600">Andar:</span>
+    {% for item in andares %}
+        {% if item.numero == andar %}
+            <span class="btn">Andar {{ item.numero }} <small class="font-normal opacity-80">{{ item.livres }} livres</small></span>
+        {% else %}
+            <a class="btn btn-secondary" href="?{{ query_extra }}andar={{ item.numero }}">Andar {{ item.numero }} <small class="font-normal text-slate-500">{{ item.livres }} livres</small></a>
+        {% endif %}
+    {% endfor %}
+</div>

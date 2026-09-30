@@ -112,6 +112,30 @@
     @apply bg-white border border-slate-200 rounded p-4;
   }
 
+  /* Formulário em cartão (padrão de todas as telas com campos): cabeçalho verde,
+     corpo com campos empilhados e rodapé com a ação principal. */
+  .form-card {
+    @apply bg-white border border-slate-200 rounded-lg shadow-md overflow-hidden;
+  }
+  .form-card-header {
+    @apply bg-primary-600 px-6 py-4;
+  }
+  .form-card-title {
+    @apply text-lg font-semibold text-white tracking-wide;
+  }
+  .form-card-subtitle {
+    @apply text-sm text-white/80 mt-1;
+  }
+  .form-card-body {
+    @apply px-6 py-6 flex flex-col gap-5;
+  }
+  .form-card-body label {
+    @apply font-semibold mb-2;
+  }
+  .form-card-footer {
+    @apply bg-slate-50 border-t border-slate-200 px-6 py-4 flex justify-end gap-3;
+  }
+
   /* Selos / badges de status */
   .badge-success {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide

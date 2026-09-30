@@ -3,25 +3,30 @@ from django.db import models
 
 
 class Endereco(models.Model):
-    LADO_ENTRADA = 1
+    """Uma posição de palete do armazém: corredor (A–T) × andar (1–3) ×
+    posição (1–21), código no formato `001-02-A-01-01` (`001-02` fixo)."""
 
-    ANDAR_CHOICES = [
-        ('A', 'Andar A'),
-        ('B', 'Andar B'),
-        ('C', 'Andar C'),
-    ]
+    CORREDORES = 'ABCDEFGHIJKLMNOPQRST'
+    ANDARES = (1, 2, 3)
+    POSICOES = range(1, 22)
+    PREFIXO_CODIGO = '001-02'
 
-    modulo = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(20)])
-    lado = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(2)])
-    andar = models.CharField(max_length=1, choices=ANDAR_CHOICES)
-    codigo = models.CharField(max_length=4, unique=True)  # Ex: "A-04"
-    capacidade = models.IntegerField(default=21)
+    corredor = models.CharField(max_length=1, choices=[(c, c) for c in CORREDORES])
+    andar = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(3)])
+    posicao = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(21)])
+    codigo = models.CharField(max_length=14, unique=True)  # Ex: "001-02-A-01-01"
+    capacidade = models.IntegerField(default=1)
     ocupacao_atual = models.IntegerField(default=0)
     ativo = models.BooleanField(default=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['corredor', 'andar', 'posicao'], name='endereco_corredor_andar_posicao_uniq'),
+        ]
+
     @staticmethod
-    def montar_codigo(lado, andar, modulo):
-        return f'{andar}-{modulo:02d}'
+    def montar_codigo(corredor, andar, posicao):
+        return f'{Endereco.PREFIXO_CODIGO}-{corredor}-{andar:02d}-{posicao:02d}'
 
     def __str__(self):
         return self.codigo

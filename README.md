@@ -47,7 +47,7 @@ WMS2/
 ├── apps/                         # Aplicativos Django
 │   ├── core/                    # Autenticação, grupos, decoradores
 │   │   ├── decorators.py       # @group_required
-│   │   ├── views.py            # Login, logout, confirmar_armazenagem
+│   │   ├── views.py            # Login, logout
 │   │   ├── models.py           # (sem modelos específicos)
 │   │   ├── migrations/
 │   │   │   └── 0001_popular_grupos.py  # Popula Administradores, Gestores, Operadores

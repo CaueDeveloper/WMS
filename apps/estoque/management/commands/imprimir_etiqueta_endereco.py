@@ -12,7 +12,7 @@ class Command(BaseCommand):
         parser.add_argument(
             'codigo_endereco',
             type=str,
-            help='Código do endereço a imprimir, ex.: A-04. '
+            help='Código do endereço a imprimir, ex.: 001-02-A-01-01. '
             'Não precisa existir no banco — aceita qualquer texto para teste.',
         )
         parser.add_argument(

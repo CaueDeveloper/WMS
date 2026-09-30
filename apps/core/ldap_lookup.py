@@ -1,31 +1,32 @@
-"""Busca de membros dos grupos do AD (Produção/Logística) ainda sem usuário
+"""Busca de usuários do AD (todos, sem filtro por grupo) ainda sem usuário
 Django — usado pela tela de atribuição manual (Administradores). Import do
 python-ldap protegido pelo mesmo motivo de settings.py: sem wheel oficial
 para Windows, o projeto deve continuar rodando sem essa dependência.
 """
+import os
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 
 try:
     import ldap
+    from ldap.filter import escape_filter_chars
     _LDAP_DISPONIVEL = True
 except ImportError:
     _LDAP_DISPONIVEL = False
 
-AREAS_AD = {
-    'PRODUCAO': {
-        'label': 'Produção',
-        'group_dn_env': 'AUTH_LDAP_GROUP_DN_PRODUCAO',
-        'grupo_gestor': 'Gestor Produção',
-        'grupo_colaborador': 'Operador Produção',
-    },
-    'LOGISTICA': {
-        'label': 'Logística',
-        'group_dn_env': 'AUTH_LDAP_GROUP_DN_LOGISTICA',
-        'grupo_gestor': 'Gestor Logística',
-        'grupo_colaborador': 'Operador Logística',
-    },
-}
+# Grupos Django que o Administrador pode atribuir a um usuário do AD.
+GRUPOS_ATRIBUIVEIS = [
+    'Gestor Produção',
+    'Operador Produção',
+    'Gestor Logística',
+    'Operador Logística',
+]
+
+TAMANHO_MINIMO_BUSCA = 2
+LIMITE_RESULTADOS = 15
+# Exclui contas desabilitadas (bit ACCOUNTDISABLE de userAccountControl).
+_FILTRO_CONTA_ATIVA = '(!(userAccountControl:1.2.840.113556.1.4.803:=2))'
 
 
 class LdapIndisponivelError(Exception):
@@ -49,49 +50,52 @@ def _conectar():
     return conn
 
 
-def listar_membros_sem_usuario(area_key):
-    """Retorna [{'username': sAMAccountName, 'nome': displayName}, ...] dos
-    membros do grupo AD daquela área que ainda não têm User Django."""
-    area = AREAS_AD[area_key]
-    group_dn = getattr(settings, area['group_dn_env'], None) or __import__('os').environ.get(area['group_dn_env'])
-    if not group_dn:
-        raise LdapIndisponivelError(f"DN do grupo AD de {area['label']} não configurado no .env.")
+def _decodificar(valores):
+    if not valores:
+        return ''
+    valor = valores[0]
+    return valor.decode('utf-8') if isinstance(valor, bytes) else valor
 
-    conn = _conectar()
-    try:
-        resultado = conn.search_s(group_dn, ldap.SCOPE_BASE, '(objectClass=group)', ['member'])
-    finally:
-        conn.unbind_s()
 
-    if not resultado:
+def buscar_usuarios_ad(termo):
+    """Retorna [{'username': sAMAccountName, 'nome': displayName}, ...] de
+    usuários do AD cujo login ou nome contém `termo` e que ainda não têm
+    User Django."""
+    termo = (termo or '').strip()
+    if len(termo) < TAMANHO_MINIMO_BUSCA:
         return []
 
-    _, attrs = resultado[0]
-    membros_dn = [dn.decode('utf-8') if isinstance(dn, bytes) else dn for dn in attrs.get('member', [])]
+    search_base = getattr(settings, 'AUTH_LDAP_USER_SEARCH_BASE', '') or os.environ.get('AUTH_LDAP_USER_SEARCH_BASE', '')
+    if not search_base:
+        raise LdapIndisponivelError('Base de busca de usuários do AD não configurada no .env.')
 
-    User = get_user_model()
-    ja_cadastrados = set(
-        User.objects.values_list('username', flat=True)
+    padrao = escape_filter_chars(termo) if _LDAP_DISPONIVEL else termo
+    filtro = (
+        f'(&(objectCategory=person)(objectClass=user){_FILTRO_CONTA_ATIVA}'
+        f'(|(sAMAccountName=*{padrao}*)(displayName=*{padrao}*)))'
     )
 
-    user_search_base = getattr(settings, 'AUTH_LDAP_USER_SEARCH_BASE', '')
     conn = _conectar()
     try:
-        pendentes = []
-        for membro_dn in membros_dn:
-            resultado_usuario = conn.search_s(
-                membro_dn, ldap.SCOPE_BASE, '(objectClass=user)', ['sAMAccountName', 'displayName'],
+        try:
+            resultado = conn.search_s(
+                search_base, ldap.SCOPE_SUBTREE, filtro, ['sAMAccountName', 'displayName'],
             )
-            if not resultado_usuario:
-                continue
-            _, attrs_usuario = resultado_usuario[0]
-            sam_bytes = attrs_usuario.get('sAMAccountName', [b''])[0]
-            nome_bytes = attrs_usuario.get('displayName', [b''])[0]
-            username = sam_bytes.decode('utf-8') if isinstance(sam_bytes, bytes) else sam_bytes
-            nome = nome_bytes.decode('utf-8') if isinstance(nome_bytes, bytes) else nome_bytes
-            if username and username not in ja_cadastrados:
-                pendentes.append({'username': username, 'nome': nome or username})
+        except ldap.SIZELIMIT_EXCEEDED:
+            raise LdapIndisponivelError('Muitos resultados — digite mais letras para refinar a busca.')
     finally:
         conn.unbind_s()
 
-    return sorted(pendentes, key=lambda p: p['nome'].lower())
+    ja_cadastrados = {u.lower() for u in get_user_model().objects.values_list('username', flat=True)}
+
+    encontrados = []
+    for dn, attrs in resultado:
+        if not dn:  # referrals do AD vêm com DN None
+            continue
+        username = _decodificar(attrs.get('sAMAccountName'))
+        if not username or username.lower() in ja_cadastrados:
+            continue
+        encontrados.append({'username': username, 'nome': _decodificar(attrs.get('displayName')) or username})
+
+    encontrados.sort(key=lambda p: p['nome'].lower())
+    return encontrados[:LIMITE_RESULTADOS]

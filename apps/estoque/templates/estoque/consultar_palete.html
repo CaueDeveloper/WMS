@@ -21,8 +21,8 @@
     </div>
 
 {% elif modo == 'palete' %}
-    <h2 class="mb-4">Consultar por Palete</h2>
     {% if palete %}
+        <h2 class="mb-4">Consultar por Palete</h2>
         <div class="card max-w-lg mb-4">
             <p class="font-semibold text-slate-800 mb-1">{{ palete.barcode_palete }}</p>
             <p class="text-sm text-slate-600 mb-1">SKU: {{ palete.sku }} — Lote: {{ palete.lote }}</p>
@@ -44,28 +44,43 @@
 
         <p><a class="btn btn-secondary" href="?modo=palete">Nova bipagem</a></p>
     {% else %}
-        <form method="get" autocomplete="off" class="flex flex-wrap items-end gap-3 max-w-lg">
-            <div class="flex-1 min-w-[220px]">
-                <label for="id_barcode">Bipe ou digite o código de barras do palete</label>
-                <input type="text" name="barcode" id="id_barcode" class="input-field" value="{{ barcode }}" autofocus autocomplete="off">
+        <form method="get" autocomplete="off" class="form-card max-w-lg mx-auto">
+            <header class="form-card-header">
+                <h2 class="form-card-title">Consultar por Palete</h2>
+                <p class="form-card-subtitle">Informe o código de barras do palete.</p>
+            </header>
+            <div class="form-card-body">
+                <div>
+                    <label for="id_barcode">Bipe ou digite o código de barras do palete</label>
+                    <input type="text" name="barcode" id="id_barcode" class="input-field" value="{{ barcode }}" autofocus autocomplete="off">
+                </div>
             </div>
-            <button type="submit" class="btn">Buscar</button>
+            <footer class="form-card-footer">
+                <button type="submit" class="btn">Buscar</button>
+            </footer>
         </form>
     {% endif %}
 
 {% elif modo == 'lote' %}
-    <h2 class="mb-4">Consultar por Lote</h2>
-    <form method="get" autocomplete="off" class="flex flex-wrap items-end gap-3 mb-6">
+    <form method="get" autocomplete="off" class="form-card max-w-lg mx-auto mb-6">
         <input type="hidden" name="modo" value="lote">
-        <div>
-            <label for="id_lote">Lote</label>
-            <input type="text" name="lote" id="id_lote" class="input-field" value="{{ lote }}" autofocus autocomplete="off">
+        <header class="form-card-header">
+            <h2 class="form-card-title">Consultar por Lote</h2>
+            <p class="form-card-subtitle">Preencha ao menos um critério de busca.</p>
+        </header>
+        <div class="form-card-body">
+            <div>
+                <label for="id_lote">Lote</label>
+                <input type="text" name="lote" id="id_lote" class="input-field" value="{{ lote }}" autofocus autocomplete="off">
+            </div>
+            <div>
+                <label for="id_data_fabricacao">Data de Fabricação do Palete</label>
+                <input type="date" name="data_fabricacao" id="id_data_fabricacao" class="input-field" value="{{ data_fabricacao }}">
+            </div>
         </div>
-        <div>
-            <label for="id_data_fabricacao">Data de Fabricação do Palete</label>
-            <input type="date" name="data_fabricacao" id="id_data_fabricacao" class="input-field" value="{{ data_fabricacao }}">
-        </div>
-        <button type="submit" class="btn">Buscar</button>
+        <footer class="form-card-footer">
+            <button type="submit" class="btn">Buscar</button>
+        </footer>
     </form>
 
     {% if resultados %}
@@ -114,7 +129,8 @@
     {% if endereco %}
         <div class="card max-w-lg mb-4">
             <p class="font-semibold text-slate-800 mb-1">{{ endereco.codigo }}</p>
-            <p class="text-sm text-slate-600">Ocupação: {{ endereco.ocupacao_atual }}/{{ endereco.capacidade }}</p>
+            <p class="text-sm text-slate-600">Corredor {{ endereco.corredor }} — Andar {{ endereco.andar }} — Posição {{ endereco.posicao|stringformat:"02d" }}</p>
+            <p class="text-sm text-slate-600">{% if endereco.ocupacao_atual %}Ocupado{% else %}Livre{% endif %}</p>
         </div>
 
         {% if paletes %}
@@ -156,28 +172,35 @@
 
         <p><a class="btn btn-secondary" href="?modo=endereco">Nova consulta</a></p>
     {% else %}
-        <h2 class="mb-4">Consulte por Andar / Corredor / Mapa Inteiro</h2>
-        <form method="get" autocomplete="off" class="flex flex-wrap items-end gap-3 mb-6">
+        <form method="get" autocomplete="off" class="form-card max-w-lg mx-auto mb-6">
             <input type="hidden" name="modo" value="endereco">
+            <header class="form-card-header">
+                <h2 class="form-card-title">Consultar por Endereço</h2>
+                <p class="form-card-subtitle">Filtre por andar, corredor ou consulte o mapa inteiro.</p>
+            </header>
+            <div class="form-card-body">
             <div>
                 <label for="id_andar">Andar</label>
                 <select name="andar" id="id_andar" class="input-field">
                     <option value="">Todos</option>
                     {% for a in andares %}
-                        <option value="{{ a }}" {% if andar == a %}selected{% endif %}>Andar {{ a }}</option>
+                        <option value="{{ a }}" {% if andar == a|stringformat:"s" %}selected{% endif %}>Andar {{ a }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div>
-                <label for="id_modulo">Corredor</label>
-                <select name="modulo" id="id_modulo" class="input-field">
+                <label for="id_corredor">Corredor</label>
+                <select name="corredor" id="id_corredor" class="input-field">
                     <option value="">Todos</option>
-                    {% for m in modulos %}
-                        <option value="{{ m }}" {% if modulo == m|stringformat:"s" %}selected{% endif %}>{{ m|stringformat:"02d" }}</option>
+                    {% for c in corredores %}
+                        <option value="{{ c }}" {% if corredor == c %}selected{% endif %}>{{ c }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <button type="submit" class="btn">Buscar</button>
+            </div>
+            <footer class="form-card-footer">
+                <button type="submit" class="btn">Buscar</button>
+            </footer>
         </form>
 
         {% if filtro_submetido %}
@@ -208,13 +231,13 @@
             </div>
             <div class="flex items-center gap-3 mb-6">
                 {% if resultados_mapa.has_previous %}
-                    <a class="btn btn-secondary" href="?modo=endereco&andar={{ andar|urlencode }}&modulo={{ modulo|urlencode }}&pg={{ resultados_mapa.previous_page_number }}">« Anterior</a>
+                    <a class="btn btn-secondary" href="?modo=endereco&andar={{ andar|urlencode }}&corredor={{ corredor|urlencode }}&pg={{ resultados_mapa.previous_page_number }}">« Anterior</a>
                 {% else %}
                     <span class="btn opacity-50 cursor-not-allowed bg-slate-300">« Anterior</span>
                 {% endif %}
                 <span class="text-sm text-slate-500 whitespace-nowrap">Página {{ resultados_mapa.number }} de {{ resultados_mapa.paginator.num_pages }}</span>
                 {% if resultados_mapa.has_next %}
-                    <a class="btn btn-secondary" href="?modo=endereco&andar={{ andar|urlencode }}&modulo={{ modulo|urlencode }}&pg={{ resultados_mapa.next_page_number }}">Próxima »</a>
+                    <a class="btn btn-secondary" href="?modo=endereco&andar={{ andar|urlencode }}&corredor={{ corredor|urlencode }}&pg={{ resultados_mapa.next_page_number }}">Próxima »</a>
                 {% else %}
                     <span class="btn opacity-50 cursor-not-allowed bg-slate-300">Próxima »</span>
                 {% endif %}
@@ -224,14 +247,8 @@
             {% endif %}
         {% endif %}
 
-        <div class="flex flex-wrap justify-center gap-4 text-xs text-slate-500 mb-4">
-            <span class="inline-flex items-center gap-1.5"><span class="nivel-vazio w-4 h-4 rounded border border-slate-300 inline-block"></span> Vazio</span>
-            <span class="inline-flex items-center gap-1.5"><span class="nivel-baixo w-4 h-4 rounded border border-slate-300 inline-block"></span> &lt; 30%</span>
-            <span class="inline-flex items-center gap-1.5"><span class="nivel-medio w-4 h-4 rounded border border-slate-300 inline-block"></span> 30–69%</span>
-            <span class="inline-flex items-center gap-1.5"><span class="nivel-alto w-4 h-4 rounded border border-slate-300 inline-block"></span> 70–99%</span>
-            <span class="inline-flex items-center gap-1.5"><span class="nivel-cheio w-4 h-4 rounded border border-slate-300 inline-block"></span> Cheio (100%)</span>
-        </div>
-        {% include 'estoque/_grade_enderecos.html' with grade=grade modulos=modulos link_endereco=request.path %}
+        {% include 'estoque/_legenda_grade.html' %}
+        {% include 'estoque/_grade_enderecos.html' with titulo=grade_titulo grade=grade link_endereco=request.path %}
     {% endif %}
 {% endif %}
 {% endblock %}

@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.db.models import Sum
+from django.db.models import Count, F, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.dateparse import parse_date
@@ -18,61 +18,67 @@ from .services import (
     retirar_palete_do_mapa,
 )
 
-MODULOS = range(1, 21)
-ANDARES = ['A', 'B', 'C']
-ANDARES_DE_BAIXO_PARA_CIMA = ['C', 'B', 'A']
+CORREDORES = Endereco.CORREDORES
+ANDARES = list(Endereco.ANDARES)
+POSICOES = Endereco.POSICOES
 ITENS_POR_PAGINA_MAPA = 20
 ITENS_POR_PAGINA_BUSCA = 20
 
 
-def _nivel_ocupacao(ocupacao_atual, capacidade):
-    if capacidade <= 0 or ocupacao_atual <= 0:
-        return 'vazio'
-    percentual = ocupacao_atual / capacidade * 100
-    if percentual >= 100:
-        return 'cheio'
-    if percentual >= 70:
-        return 'alto'
-    if percentual >= 30:
-        return 'medio'
-    return 'baixo'
+def _andar_valido(valor, padrao=1):
+    valor = str(valor or '').strip()
+    return int(valor) if valor.isdigit() and int(valor) in ANDARES else padrao
 
 
-def _construir_grade(vagas_necessarias=None):
-    """Monta a grade completa de endereços (todos, inclusive cheios/inativos),
-    uma linha por andar e uma coluna por módulo/corredor — as linhas vêm na
-    ordem C, B, A (`ANDARES_DE_BAIXO_PARA_CIMA`) pra grade ser lida de baixo
-    pra cima, como os andares de um prédio real. Quando `vagas_necessarias`
-    é informado (Put-away, Etapa B), cada célula ganha `disponivel=True` só
-    se o endereço estiver ativo e tiver vagas suficientes pro lote inteiro —
-    o template usa isso pra decidir se a célula vira um botão clicável.
-    Quando `vagas_necessarias` é None (Mapa de Estoque), a grade é sempre
-    somente leitura. É a mesma grade física usada tanto pelo Put-away
-    ("Lado 01 — Entrada") quanto pelo Mapa de Estoque ("Lado 02 — Saída") —
-    os dois nomes são só o rótulo de cada tela sobre os mesmos endereços."""
-    enderecos_por_codigo = {e.codigo: e for e in Endereco.objects.all()}
+def _corredor_valido(valor):
+    valor = str(valor or '').strip().upper()
+    return valor if len(valor) == 1 and valor in CORREDORES else None
+
+
+def _construir_grade(andar, vagas_necessarias=None):
+    """Monta a grade de um andar: uma linha por corredor (A–T) e uma coluna por
+    posição (01–21). Cada célula é um endereço de 1 palete, com `estado`
+    'livre', 'ocupado' ou 'inativo'. Cada linha traz `vagas` (posições livres
+    do corredor naquele andar) e, quando `vagas_necessarias` é informado
+    (Put-away), `disponivel=True` se o corredor comporta essa quantidade — o
+    template usa isso pra habilitar o botão do corredor. Sem
+    `vagas_necessarias` (Mapa de Estoque), a grade é somente leitura."""
+    enderecos = {(e.corredor, e.posicao): e for e in Endereco.objects.filter(andar=andar)}
     linhas = []
-    for andar in ANDARES_DE_BAIXO_PARA_CIMA:
+    for corredor in CORREDORES:
         celulas = []
-        for modulo in MODULOS:
-            codigo = Endereco.montar_codigo(lado=Endereco.LADO_ENTRADA, andar=andar, modulo=modulo)
-            endereco = enderecos_por_codigo.get(codigo)
-            if endereco:
-                vagas = endereco.capacidade - endereco.ocupacao_atual
-                celulas.append({
-                    'endereco': endereco,
-                    'nivel': _nivel_ocupacao(endereco.ocupacao_atual, endereco.capacidade),
-                    'vagas': vagas,
-                    'disponivel': (
-                        vagas_necessarias is not None
-                        and endereco.ativo
-                        and vagas >= vagas_necessarias
-                    ),
-                })
-            else:
+        vagas = 0
+        for posicao in POSICOES:
+            endereco = enderecos.get((corredor, posicao))
+            if endereco is None:
                 celulas.append(None)
-        linhas.append({'andar': andar, 'celulas': celulas})
+                continue
+            if endereco.ocupacao_atual >= endereco.capacidade:
+                estado = 'ocupado'
+            elif endereco.ativo:
+                estado = 'livre'
+                vagas += 1
+            else:
+                estado = 'inativo'
+            celulas.append({'endereco': endereco, 'estado': estado})
+        linhas.append({
+            'corredor': corredor,
+            'celulas': celulas,
+            'vagas': vagas,
+            'disponivel': vagas_necessarias is not None and vagas >= vagas_necessarias,
+        })
     return linhas
+
+
+def _resumo_andares():
+    """Posições livres/total por andar (endereços ativos), para o filtro de andar."""
+    resumo = {a: {'numero': a, 'livres': 0, 'total': 0} for a in ANDARES}
+    for linha in Endereco.objects.filter(ativo=True).values('andar').annotate(
+        capacidade=Sum('capacidade'), ocupacao=Sum('ocupacao_atual'),
+    ):
+        resumo[linha['andar']]['total'] = linha['capacidade']
+        resumo[linha['andar']]['livres'] = linha['capacidade'] - linha['ocupacao']
+    return list(resumo.values())
 
 
 def _buscar_paletes_pendentes_do_lote(request, lote):
@@ -94,19 +100,28 @@ def _buscar_paletes_pendentes_do_lote(request, lote):
 
 
 def _maior_vaga_disponivel():
-    """Maior número de vagas livres num único endereço ativo. Se o lote
+    """Maior número de posições livres num único corredor/andar. Se o lote
     pendente for maior que isso, ele não cabe inteiro em lugar nenhum — é o
     gatilho da armazenagem parcial do Put-away (ver `alocar_lote`,
-    `permitir_parcial`). São só 60 endereços, então a varredura em Python é
-    irrelevante e evita expressão agregada sobre dois campos."""
-    return max(
-        (max(e.capacidade - e.ocupacao_atual, 0) for e in Endereco.objects.filter(ativo=True)),
-        default=0,
+    `permitir_parcial`)."""
+    grupos = (
+        Endereco.objects.filter(ativo=True, ocupacao_atual__lt=F('capacidade'))
+        .values('corredor', 'andar').annotate(livres=Count('pk'))
     )
+    return max((g['livres'] for g in grupos), default=0)
 
 
-def _redirect_com_lote(lote):
-    return redirect(f"{reverse('estoque:putaway')}?{urlencode({'lote': lote})}")
+def _redirect_com_lote(lote, andar=None):
+    parametros = {'lote': lote}
+    if andar:
+        parametros['andar'] = andar
+    return redirect(f"{reverse('estoque:putaway')}?{urlencode(parametros)}")
+
+
+def _descrever_destino(enderecos):
+    if len(enderecos) == 1:
+        return enderecos[0].codigo
+    return f'{enderecos[0].codigo} a {enderecos[-1].codigo}'
 
 
 def _buscar_lote_por_barcode(request, barcode):
@@ -135,14 +150,19 @@ def _buscar_lote_por_barcode(request, barcode):
 @group_required('Administradores', 'Operador Logística')
 def putaway(request):
     if request.method == 'POST':
-        if 'codigo_endereco' in request.POST:
-            # Etapa B: aloca o lote no endereço escolhido na grade. Quando o
-            # lote não cabe inteiro em nenhum endereço do armazém, a
-            # alocação vira parcial — enche o endereço escolhido e devolve o
-            # usuário para a mesma tela (?lote=) para escolher outro
-            # endereço para o restante, até o lote inteiro estar armazenado.
+        if 'destino' in request.POST:
+            # Etapa B: aloca o lote nas primeiras posições livres do corredor
+            # escolhido (no andar filtrado). Quando o lote não cabe inteiro em
+            # nenhum corredor/andar, a alocação vira parcial — enche o
+            # corredor escolhido e devolve o usuário para a mesma tela
+            # (?lote=) para escolher outro corredor para o restante, até o
+            # lote inteiro estar armazenado.
             lote = (request.POST.get('lote') or '').strip()
-            codigo_endereco = (request.POST.get('codigo_endereco') or '').strip()
+            corredor = _corredor_valido(request.POST.get('destino'))
+            andar = _andar_valido(request.POST.get('andar'))
+            if corredor is None:
+                messages.error(request, 'Corredor inválido. Escolha um corredor de A a T.')
+                return _redirect_com_lote(lote, andar)
             # permitir_parcial é uma permissão, não uma decisão: calculada
             # fora da transação, pode estar desatualizada, e nos dois
             # sentidos isso é inofensivo — se o lote passar a caber,
@@ -152,32 +172,33 @@ def putaway(request):
             pendentes = Palete.objects.filter(estado='CONFERIDO_LOGISTICA', lote=lote).count()
             permitir_parcial = pendentes > _maior_vaga_disponivel()
             try:
-                endereco, paletes = alocar_lote(
-                    lote, codigo_endereco, usuario=request.user, permitir_parcial=permitir_parcial,
+                enderecos, paletes = alocar_lote(
+                    lote, corredor, andar, usuario=request.user, permitir_parcial=permitir_parcial,
                 )
             except LoteVazioError as exc:
                 # Sem nada pendente não há Etapa B para voltar: volta pra Etapa A.
                 messages.error(request, str(exc))
                 return redirect('estoque:putaway')
             except Endereco.DoesNotExist:
-                messages.error(request, f'Endereço "{codigo_endereco}" não encontrado, inativo ou não existe mais.')
-                return _redirect_com_lote(lote)
+                messages.error(request, f'Corredor {corredor}, andar {andar} não encontrado ou inativo.')
+                return _redirect_com_lote(lote, andar)
             except EnderecoCheioError as exc:
-                messages.error(request, f'{exc} Escolha outro endereço.')
-                return _redirect_com_lote(lote)
+                messages.error(request, f'{exc} Escolha outro corredor.')
+                return _redirect_com_lote(lote, andar)
 
+            destino = _descrever_destino(enderecos)
             restantes = Palete.objects.filter(estado='CONFERIDO_LOGISTICA', lote=lote).count()
             if restantes:
                 messages.success(
                     request,
-                    f'{len(paletes)} palete(s) do lote {lote} armazenado(s) em {endereco.codigo}. '
-                    f'Faltam {restantes} palete(s) — escolha o próximo endereço.',
+                    f'{len(paletes)} palete(s) do lote {lote} armazenado(s) em {destino}. '
+                    f'Faltam {restantes} palete(s) — escolha o próximo corredor.',
                 )
-                return _redirect_com_lote(lote)
+                return _redirect_com_lote(lote, andar)
 
             messages.success(
                 request,
-                f'Lote {lote} ({len(paletes)} palete(s)) armazenado em {endereco.codigo}.',
+                f'Lote {lote} ({len(paletes)} palete(s)) armazenado em {destino}.',
             )
             return redirect('estoque:putaway')
 
@@ -199,19 +220,23 @@ def putaway(request):
 
     quantidade = len(paletes) if paletes else 0
     maior_vaga = _maior_vaga_disponivel() if paletes else 0
-    # Modo parcial: nenhum endereço comporta o lote inteiro. A grade passa a
-    # aceitar qualquer endereço com ao menos 1 vaga (vagas_necessarias=1) —
-    # _construir_grade não muda, só o argumento.
+    # Modo parcial: nenhum corredor/andar comporta o lote inteiro. A grade
+    # passa a aceitar qualquer corredor com ao menos 1 posição livre
+    # (vagas_necessarias=1) — _construir_grade não muda, só o argumento.
     modo_parcial = bool(paletes) and quantidade > maior_vaga
     sem_vagas = bool(paletes) and maior_vaga == 0
+    andar = _andar_valido(request.GET.get('andar'))
     return render(request, 'estoque/putaway.html', {
         'lote': lote,
         'paletes': paletes,
         'quantidade': quantidade,
         'peso_total': sum(p.peso_kg for p in paletes) if paletes else None,
-        'grade': _construir_grade(vagas_necessarias=1 if modo_parcial else quantidade) if paletes else None,
-        'grade_titulo': 'Lado 01 — Entrada',
-        'modulos': MODULOS,
+        'grade': _construir_grade(andar, vagas_necessarias=1 if modo_parcial else quantidade) if paletes else None,
+        'grade_titulo': f'Andar {andar}',
+        'posicoes': POSICOES,
+        'andar': andar,
+        'andares': _resumo_andares() if paletes else None,
+        'query_extra': urlencode({'lote': lote}) + '&' if lote else '',
         'paletes_pendentes': (
             Palete.objects.filter(estado='CONFERIDO_LOGISTICA').order_by('lote', 'atualizado_em')
             if not lote else None
@@ -222,65 +247,49 @@ def putaway(request):
 
 
 def _marcar_caminho(grade, endereco_destino):
-    """Marca, na grade já construída, a trilha de módulos até o endereço de
-    destino: como o layout físico real do armazém (corredores, distâncias)
-    não é modelado, assume-se um corredor único, em ordem crescente de módulo,
-    do módulo 01 até o módulo de destino, no mesmo andar. Cada célula da
-    trilha ganha `no_caminho=True`; a primeira célula que de fato existir na
-    trilha ganha `eh_inicio=True` (protege contra o módulo 01 naquele andar
-    não existir/estar inativo); a célula final também ganha
-    `eh_destino=True` (se a trilha tiver um só módulo, a mesma célula
-    acumula `eh_inicio` e `eh_destino`)."""
+    """Marca, na grade do andar já construída, a trilha até o endereço de
+    destino: percorre o corredor do destino em ordem crescente de posição, da
+    posição 01 até a posição do palete. Cada célula da trilha ganha
+    `no_caminho=True`; a primeira célula que de fato existir na trilha ganha
+    `eh_inicio=True`; a célula final também ganha `eh_destino=True` (se a
+    trilha tiver uma só posição, a mesma célula acumula `eh_inicio` e
+    `eh_destino`)."""
     primeira_celula_da_trilha = True
     for linha in grade:
-        if linha['andar'] != endereco_destino.andar:
+        if linha['corredor'] != endereco_destino.corredor:
             continue
-        for indice, celula in enumerate(linha['celulas']):
-            modulo = MODULOS[indice]
-            if modulo > endereco_destino.modulo:
+        for posicao, celula in zip(POSICOES, linha['celulas']):
+            if posicao > endereco_destino.posicao or not celula:
                 continue
-            if celula:
-                celula['no_caminho'] = True
-                if primeira_celula_da_trilha:
-                    celula['eh_inicio'] = True
-                    primeira_celula_da_trilha = False
-                if modulo == endereco_destino.modulo:
-                    celula['eh_destino'] = True
+            celula['no_caminho'] = True
+            if primeira_celula_da_trilha:
+                celula['eh_inicio'] = True
+                primeira_celula_da_trilha = False
+            if posicao == endereco_destino.posicao:
+                celula['eh_destino'] = True
     return grade
 
 
-def _filtrar_grade(grade, andar=None, modulo=None):
-    """Reduz a grade já construída ao filtro de 'Consultar por Endereço'
-    (andar inteiro, corredor/módulo inteiro, ou ambos) — ao contrário de
-    `_marcar_caminho` (que só destaca células numa grade completa), aqui as
-    linhas/células fora do filtro são removidas de verdade, não só marcadas.
-    Sem `andar` nem `modulo` (mapa inteiro), a grade completa volta
-    inalterada."""
-    linhas_filtradas = []
-    for linha in grade:
-        if andar is not None and linha['andar'] != andar:
-            continue
-        celulas = linha['celulas']
-        if modulo is not None:
-            celulas = [
-                celula if (celula and celula['endereco'].modulo == modulo) else None
-                for celula in celulas
-            ]
-        linhas_filtradas.append({'andar': linha['andar'], 'celulas': celulas})
-    return linhas_filtradas
+def _filtrar_grade(grade, corredor=None):
+    """Reduz a grade do andar ao corredor escolhido em 'Consultar por
+    Endereço' — as linhas fora do filtro são removidas de verdade, não só
+    marcadas. Sem `corredor`, a grade volta inalterada."""
+    if corredor is None:
+        return grade
+    return [linha for linha in grade if linha['corredor'] == corredor]
 
 
-def _buscar_paletes_por_filtro_mapa(andar=None, modulo=None):
+def _buscar_paletes_por_filtro_mapa(andar=None, corredor=None):
     """Lista os paletes ARMAZENADO do mapa inteiro, opcionalmente filtrados
-    por andar e/ou módulo (modo 'Consultar por Endereço'). Sem nenhum
+    por andar e/ou corredor (modo 'Consultar por Endereço'). Sem nenhum
     filtro, devolve todos os ARMAZENADO — usado pela consulta de mapa
     inteiro."""
     paletes = Palete.objects.filter(estado='ARMAZENADO').select_related('endereco', 'area_destino')
-    if andar:
+    if andar is not None:
         paletes = paletes.filter(endereco__andar=andar)
-    if modulo is not None:
-        paletes = paletes.filter(endereco__modulo=modulo)
-    return paletes.order_by('endereco__modulo', 'endereco__andar')
+    if corredor is not None:
+        paletes = paletes.filter(endereco__corredor=corredor)
+    return paletes.order_by('endereco__corredor', 'endereco__andar', 'endereco__posicao')
 
 
 def _buscar_armazenamento_do_palete(request, barcode):
@@ -308,7 +317,7 @@ def _buscar_armazenamento_do_palete(request, barcode):
         'quantidade': 1,
         'peso_total': palete.peso_kg,
         'paletes': [palete],
-        'grade': _marcar_caminho(_construir_grade(), endereco),
+        'grade': _marcar_caminho(_construir_grade(endereco.andar), endereco),
     }
 
 
@@ -321,18 +330,19 @@ def plano_armazenagem(request):
     return render(request, 'estoque/plano_armazenagem.html', {
         'barcode_palete': barcode,
         'grupo': grupo,
-        'modulos': MODULOS,
+        'posicoes': POSICOES,
     })
 
 
 @group_required('Administradores', 'Gestor Produção', 'Gestor Logística')
 def mapa_estoque(request):
-    grade = _construir_grade()
+    andar = _andar_valido(request.GET.get('andar'))
+    grade = _construir_grade(andar)
 
     paginator_armazenados = Paginator(
         Palete.objects.filter(estado='ARMAZENADO')
         .select_related('endereco', 'area_destino')
-        .order_by('endereco__modulo', 'endereco__andar', 'atualizado_em'),
+        .order_by('endereco__corredor', 'endereco__andar', 'endereco__posicao'),
         ITENS_POR_PAGINA_MAPA,
     )
     paletes_armazenados = paginator_armazenados.get_page(request.GET.get('pg_armazenados'))
@@ -348,8 +358,11 @@ def mapa_estoque(request):
 
     return render(request, 'estoque/mapa_estoque.html', {
         'grade': grade,
-        'grade_titulo': 'Lado 02 — Saída',
-        'modulos': MODULOS,
+        'grade_titulo': f'Andar {andar}',
+        'posicoes': POSICOES,
+        'andar': andar,
+        'andares': _resumo_andares(),
+        'query_extra': '',
         'paletes_armazenados': paletes_armazenados,
         'total_paletes_armazenados': paginator_armazenados.count,
         'total_paletes_pendentes_armazenagem': total_paletes_pendentes_armazenagem,
@@ -499,16 +512,18 @@ def consultar_palete(request):
 
     if modo == 'endereco':
         codigo_endereco = request.GET.get('codigo_endereco', '').strip()
-        andar = request.GET.get('andar', '').strip()
-        modulo_str = request.GET.get('modulo', '').strip()
-        modulo = int(modulo_str) if modulo_str.isdigit() and int(modulo_str) in MODULOS else None
+        andar_str = request.GET.get('andar', '').strip()
+        andar_filtro = _andar_valido(andar_str, padrao=None)
+        corredor = _corredor_valido(request.GET.get('corredor'))
 
-        filtro_submetido = not codigo_endereco and ('andar' in request.GET or 'modulo' in request.GET)
+        filtro_submetido = not codigo_endereco and ('andar' in request.GET or 'corredor' in request.GET)
         resultados_mapa = None
-        grade = _construir_grade()
+        grade = _construir_grade(andar_filtro or 1)
         if filtro_submetido:
-            grade = _filtrar_grade(grade, andar=andar or None, modulo=modulo)
-            paginator = Paginator(_buscar_paletes_por_filtro_mapa(andar=andar or None, modulo=modulo), ITENS_POR_PAGINA_BUSCA)
+            grade = _filtrar_grade(grade, corredor=corredor)
+            paginator = Paginator(
+                _buscar_paletes_por_filtro_mapa(andar=andar_filtro, corredor=corredor), ITENS_POR_PAGINA_BUSCA,
+            )
             resultados_mapa = paginator.get_page(request.GET.get('pg'))
 
         endereco, paletes = _buscar_paletes_por_endereco(request, codigo_endereco)
@@ -519,9 +534,11 @@ def consultar_palete(request):
             'paletes': paletes,
             'grade': grade,
             'andares': ANDARES,
-            'modulos': MODULOS,
-            'andar': andar,
-            'modulo': modulo_str,
+            'corredores': CORREDORES,
+            'posicoes': POSICOES,
+            'andar': str(andar_filtro or ''),
+            'corredor': corredor or '',
+            'grade_titulo': f'Andar {andar_filtro or 1}',
             'filtro_submetido': filtro_submetido,
             'resultados_mapa': resultados_mapa,
         })

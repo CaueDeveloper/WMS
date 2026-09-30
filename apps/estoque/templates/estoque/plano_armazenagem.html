@@ -9,23 +9,27 @@
     <p class="{% if mensagem.tags == 'error' %}alert-error{% else %}alert-success{% endif %}">{{ mensagem }}</p>
 {% endfor %}
 
-<form method="get" autocomplete="off" class="flex flex-wrap items-end gap-3 mb-6">
-    <div>
-        <label for="id_barcode_palete">Barcode</label>
-        <input type="text" name="barcode_palete" id="id_barcode_palete" class="input-field" value="{{ barcode_palete }}" autofocus autocomplete="off" required>
+<form method="get" autocomplete="off" class="form-card max-w-lg mx-auto mb-6">
+    <header class="form-card-header">
+        <h2 class="form-card-title">Localizar Palete</h2>
+        <p class="form-card-subtitle">Bipe o palete para ver o trajeto até o endereço de armazenagem.</p>
+    </header>
+    <div class="form-card-body">
+        <div>
+            <label for="id_barcode_palete">Barcode</label>
+            <input type="text" name="barcode_palete" id="id_barcode_palete" class="input-field" value="{{ barcode_palete }}" autofocus autocomplete="off" required>
+        </div>
     </div>
-    <button type="submit" class="btn">Buscar</button>
+    <footer class="form-card-footer">
+        <button type="submit" class="btn">Buscar</button>
+    </footer>
 </form>
 
 {% if grupo %}
+    {% include 'estoque/_legenda_grade.html' %}
     <div class="flex flex-wrap justify-center gap-4 text-xs text-slate-500 mb-4">
-        <span class="inline-flex items-center gap-1.5"><span class="nivel-vazio w-4 h-4 rounded border border-slate-300 inline-block"></span> Vazio</span>
-        <span class="inline-flex items-center gap-1.5"><span class="nivel-baixo w-4 h-4 rounded border border-slate-300 inline-block"></span> &lt; 30%</span>
-        <span class="inline-flex items-center gap-1.5"><span class="nivel-medio w-4 h-4 rounded border border-slate-300 inline-block"></span> 30–69%</span>
-        <span class="inline-flex items-center gap-1.5"><span class="nivel-alto w-4 h-4 rounded border border-slate-300 inline-block"></span> 70–99%</span>
-        <span class="inline-flex items-center gap-1.5"><span class="nivel-cheio w-4 h-4 rounded border border-slate-300 inline-block"></span> Cheio (100%)</span>
         <span class="inline-flex items-center gap-1.5"><span class="w-4 h-4 rounded border-2 border-primary-600 bg-primary-100 inline-block"></span> ● Início do trajeto</span>
-        <span class="inline-flex items-center gap-1.5"><span class="w-4 h-4 rounded border-2 border-primary-600 bg-primary-50 inline-block"></span> Caminho até o destino</span>
+        <span class="inline-flex items-center gap-1.5"><span class="w-4 h-4 rounded border-2 border-primary-600 bg-primary-50 inline-block"></span> → Caminho até o destino</span>
         <span class="inline-flex items-center gap-1.5"><span class="w-4 h-4 rounded border-2 border-danger-500 bg-danger-50 inline-block"></span> ★ Endereço de destino</span>
     </div>
 
@@ -41,12 +45,12 @@
             <span class="w-8 h-8 rounded-full bg-primary-600 text-white flex items-center justify-center font-bold shrink-0" aria-hidden="true">●</span>
             <div>
                 <div class="text-xs uppercase text-slate-500 tracking-wide">Início</div>
-                <div class="font-semibold text-slate-800">Módulo 01 — Andar {{ grupo.endereco.andar }}</div>
+                <div class="font-semibold text-slate-800">Corredor {{ grupo.endereco.corredor }} — Posição 01 (Andar {{ grupo.endereco.andar }})</div>
             </div>
         </div>
         <div class="flex flex-col items-center flex-1 min-w-[70px]" aria-hidden="true">
             <span class="text-2xl font-bold text-primary-700 leading-none">→</span>
-            <small class="text-slate-500 text-xs">{{ grupo.endereco.modulo }} módulo(s)</small>
+            <small class="text-slate-500 text-xs">{{ grupo.endereco.posicao }} posição(ões)</small>
         </div>
         <div class="flex items-center gap-2.5">
             <span class="w-8 h-8 rounded-full bg-danger-600 text-white flex items-center justify-center font-bold shrink-0" aria-hidden="true">★</span>
@@ -57,11 +61,11 @@
         </div>
     </div>
     <p class="text-sm text-slate-500 mb-5">
-        Empilhador: siga o Andar {{ grupo.endereco.andar }}, módulo a módulo, do módulo 01 até o
-        módulo {{ grupo.endereco.modulo|stringformat:"02d" }} — trajeto destacado em verde na grade
+        Empilhador: vá ao corredor {{ grupo.endereco.corredor }}, andar {{ grupo.endereco.andar }}, e siga da
+        posição 01 até a posição {{ grupo.endereco.posicao|stringformat:"02d" }} — trajeto destacado em verde na grade
         abaixo, terminando no endereço em vermelho.
     </p>
-    <h3 class="text-sm font-semibold text-primary-700 mb-2">Módulo 01 → {{ grupo.endereco.codigo }}</h3>
+    <h3 class="text-sm font-semibold text-primary-700 mb-2">Andar {{ grupo.endereco.andar }} — Corredor {{ grupo.endereco.corredor }}: posição 01 → {{ grupo.endereco.codigo }}</h3>
     {% include 'estoque/_grade_enderecos.html' with grade=grupo.grade %}
 {% endif %}
 {% endblock %}

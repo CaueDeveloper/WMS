@@ -4,22 +4,28 @@
 {% block titulo_pagina_coletor %}Recebimento{% endblock %}
 
 {% block shell_content_coletor %}
-<h1 class="text-xl mb-5">Emissão da Etiqueta</h1>
-
 {% for mensagem in messages %}
     <p class="{% if mensagem.tags == 'error' %}alert-error{% else %}alert-success{% endif %} text-lg">{{ mensagem }}</p>
 {% endfor %}
 
-<form method="post">
+<form method="post" class="form-card">
     {% csrf_token %}
-    {% for campo in form %}
-        <div id="linha-{{ campo.name }}" class="mb-4">
-            <label for="{{ campo.id_for_label }}" class="text-base">{{ campo.label }}</label>
-            {{ campo }}
-            {% for erro in campo.errors %}<p class="alert-error text-base">{{ erro }}</p>{% endfor %}
-        </div>
-    {% endfor %}
-    <button type="submit" class="btn btn-block btn-lg">Emitir Etiqueta</button>
+    <header class="form-card-header">
+        <h2 class="form-card-title">Emissão da Etiqueta</h2>
+        <p class="form-card-subtitle">Informe os dados do palete para imprimir a etiqueta.</p>
+    </header>
+    <div class="form-card-body">
+        {% for campo in form %}
+            <div id="linha-{{ campo.name }}">
+                <label for="{{ campo.id_for_label }}" class="text-base">{{ campo.label }}</label>
+                {{ campo }}
+                {% for erro in campo.errors %}<p class="alert-error text-base mt-2 mb-0">{{ erro }}</p>{% endfor %}
+            </div>
+        {% endfor %}
+    </div>
+    <footer class="form-card-footer">
+        <button type="submit" class="btn btn-block btn-lg">Emitir Etiqueta</button>
+    </footer>
 </form>
 {% endblock %}
 

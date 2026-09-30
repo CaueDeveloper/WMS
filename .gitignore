@@ -3,7 +3,6 @@ __pycache__/
 *.pyc
 db.sqlite3
 .env
-.env.example
 *.log
 staticfiles/
 media/
@@ -11,3 +10,4 @@ media/
 manage.py
 CLAUDE.md
 deploy/
+.claude
