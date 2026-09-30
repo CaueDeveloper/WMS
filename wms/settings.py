@@ -191,9 +191,9 @@ if _LDAP_DISPONIVEL:
         )
         AUTH_LDAP_GROUP_TYPE = GroupOfNamesType()
 
-        # Nome e sobrenome vêm do AD (givenName/sn) e são regravados no User Django
-        # a cada login LDAP (django-auth-ldap chama populate_user em todo login).
-        AUTH_LDAP_USER_ATTR_MAP = {'first_name': 'givenName', 'last_name': 'sn'}
+        # Nome, sobrenome e e-mail vêm do AD (givenName/sn/mail) e são regravados no User
+        # Django a cada login LDAP (django-auth-ldap chama populate_user em todo login).
+        AUTH_LDAP_USER_ATTR_MAP = {'first_name': 'givenName', 'last_name': 'sn', 'email': 'mail'}
 
         # Mapeamento explícito DN do grupo AD -> nome(s) do(s) grupo(s) Django, em vez
         # de AUTH_LDAP_MIRROR_GROUPS (que criaria um auth.Group por `cn` do AD — não

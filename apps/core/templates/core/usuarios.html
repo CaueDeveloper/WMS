@@ -1,0 +1,309 @@
+{% extends 'core/_shell.html' %}
+
+{% block title %}Usuários — WMS{% endblock %}
+{% block titulo_pagina %}Usuários{% endblock %}
+{% block nav_ativo_usuarios %}nav-link-ativo{% endblock %}
+
+{% block shell_content %}
+{% for mensagem in messages %}
+    <p class="{% if mensagem.tags == 'error' %}alert-error{% else %}alert-success{% endif %}">{{ mensagem }}</p>
+{% endfor %}
+
+<div class="flex items-center justify-between gap-3 mb-4">
+    <p class="text-sm text-slate-500">Usuários do WMS e o grupo de acesso de cada um.</p>
+    <button type="button" class="btn shrink-0" data-abrir="dlg-novo">＋ Novo</button>
+</div>
+
+{% if not linhas %}
+    <p class="text-sm text-slate-500">Nenhum usuário cadastrado. Clique em "Novo" para atribuir um usuário do AD a um grupo.</p>
+{% else %}
+    <div class="overflow-x-auto">
+    <table class="table-admin">
+        <thead>
+            <tr>
+                <th>Nome</th>
+                <th>Email</th>
+                <th>Grupo</th>
+                <th>Subgrupo</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for linha in linhas %}
+            <tr>
+                <td>
+                    {{ linha.usuario.get_full_name|default:linha.usuario.username }}
+                    {% if not linha.usuario.is_active %}<span class="badge-warning ml-2">Inativo</span>{% endif %}
+                </td>
+                <td>{{ linha.usuario.email|default:"—" }}</td>
+                <td>{{ linha.grupo }}</td>
+                <td>{{ linha.subgrupo }}</td>
+                <td>
+                    <button type="button" data-menu-acoes aria-label="Ações" aria-haspopup="true"
+                            class="inline-flex h-8 w-8 items-center justify-center rounded text-lg font-bold leading-none text-slate-600 hover:bg-slate-100"
+                            data-usuario-id="{{ linha.usuario.pk }}"
+                            data-nome="{{ linha.usuario.get_full_name|default:linha.usuario.username }}"
+                            data-grupo="{{ linha.grupo }}"
+                            data-subgrupo="{{ linha.subgrupo }}"
+                            data-ativo="{% if linha.usuario.is_active %}1{% endif %}">⋮</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% endif %}
+
+{# Menu flutuante das ações (posicionado por JS para não ser cortado pelo overflow da tabela) #}
+<div id="menu-acoes" class="fixed z-50 hidden w-44 overflow-hidden rounded border border-slate-200 bg-white py-1 text-sm shadow-lg">
+    <form method="post" id="menu-form-status">
+        {% csrf_token %}
+        <input type="hidden" name="acao" id="menu-acao-status">
+        <input type="hidden" name="usuario_id" id="menu-usuario-status">
+        <button type="submit" id="menu-status" class="block w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-100"></button>
+    </form>
+    <button type="button" data-abrir="dlg-alterar" class="block w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-100">Alterar grupo</button>
+    <button type="button" data-abrir="dlg-excluir" class="block w-full px-4 py-2 text-left text-danger-600 hover:bg-danger-50">Excluir</button>
+</div>
+
+{# Pop-up "Novo": busca o usuário no AD e o atribui a um grupo/subgrupo #}
+<dialog id="dlg-novo" class="fixed inset-0 m-auto h-fit max-h-[90vh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-lg p-0 shadow-xl backdrop:bg-slate-900/50">
+    <form method="post" id="form-novo" class="form-card">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="novo">
+        {{ form_novo.username }}
+        <header class="form-card-header">
+            <h2 class="form-card-title">Novo usuário</h2>
+            <p class="form-card-subtitle">Procure o usuário no Active Directory e atribua um grupo de acesso.</p>
+        </header>
+
+        <div class="form-card-body">
+            <div>
+                <label for="busca-usuario">Usuário do AD</label>
+                <input type="text" id="busca-usuario" class="input-field py-2.5" autocomplete="off"
+                       placeholder="Filtrar por nome ou login">
+                <ul id="busca-resultados" class="hidden mt-2 max-h-48 overflow-y-auto rounded border border-slate-300 bg-white text-sm divide-y divide-slate-100"></ul>
+                <p id="busca-status" class="mt-2 text-xs text-slate-500"></p>
+                <p id="busca-selecionado" class="hidden mt-2 rounded border border-success-500 bg-success-50 px-3 py-2 text-sm font-medium text-success-600"></p>
+            </div>
+
+            <div>
+                <label for="{{ form_novo.grupo.id_for_label }}">{{ form_novo.grupo.label }}</label>
+                {{ form_novo.grupo }}
+            </div>
+
+            <div>
+                <label for="{{ form_novo.subgrupo.id_for_label }}">{{ form_novo.subgrupo.label }}</label>
+                {{ form_novo.subgrupo }}
+            </div>
+        </div>
+
+        <footer class="form-card-footer">
+            <button type="button" class="btn btn-secondary" data-fechar>Cancelar</button>
+            <button type="submit" id="btn-cadastrar" class="btn" disabled>Cadastrar</button>
+        </footer>
+    </form>
+</dialog>
+
+{# Pop-up "Alterar grupo" #}
+<dialog id="dlg-alterar" class="fixed inset-0 m-auto h-fit max-h-[90vh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-lg p-0 shadow-xl backdrop:bg-slate-900/50">
+    <form method="post" class="form-card">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="alterar_grupo">
+        <input type="hidden" name="usuario_id" id="alterar-usuario-id">
+        <header class="form-card-header">
+            <h2 class="form-card-title">Alterar grupo</h2>
+            <p class="form-card-subtitle" id="alterar-nome"></p>
+        </header>
+
+        <div class="form-card-body">
+            <div>
+                <label for="alterar-grupo">{{ form_alterar.grupo.label }}</label>
+                <select name="grupo" id="alterar-grupo" class="input-field py-2.5">
+                    {% for valor, rotulo in form_alterar.fields.grupo.choices %}<option value="{{ valor }}">{{ rotulo }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="alterar-subgrupo">{{ form_alterar.subgrupo.label }}</label>
+                <select name="subgrupo" id="alterar-subgrupo" class="input-field py-2.5">
+                    {% for valor, rotulo in form_alterar.fields.subgrupo.choices %}<option value="{{ valor }}">{{ rotulo }}</option>{% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <footer class="form-card-footer">
+            <button type="button" class="btn btn-secondary" data-fechar>Cancelar</button>
+            <button type="submit" class="btn">Salvar</button>
+        </footer>
+    </form>
+</dialog>
+
+{# Pop-up de confirmação de exclusão #}
+<dialog id="dlg-excluir" class="fixed inset-0 m-auto h-fit max-h-[90vh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-lg p-0 shadow-xl backdrop:bg-slate-900/50">
+    <form method="post" class="form-card">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="excluir">
+        <input type="hidden" name="usuario_id" id="excluir-usuario-id">
+        <header class="form-card-header">
+            <h2 class="form-card-title">Excluir usuário</h2>
+        </header>
+
+        <div class="form-card-body">
+            <p class="text-sm text-slate-700">Excluir <strong id="excluir-nome"></strong> do WMS? Ele perderá o acesso ao sistema. O histórico de paletes é preservado.</p>
+        </div>
+
+        <footer class="form-card-footer">
+            <button type="button" class="btn btn-secondary" data-fechar>Cancelar</button>
+            <button type="submit" class="btn bg-danger-600 hover:bg-danger-500">Excluir</button>
+        </footer>
+    </form>
+</dialog>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var URL_BUSCA = "{% url 'buscar_usuarios_ad' %}";
+
+    document.querySelectorAll('[data-abrir]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var dlg = document.getElementById(btn.dataset.abrir);
+            if (dlg.id === 'dlg-alterar') {
+                document.getElementById('alterar-usuario-id').value = btn.dataset.usuarioId;
+                document.getElementById('alterar-nome').textContent = btn.dataset.nome;
+                if (btn.dataset.grupo !== '—') document.getElementById('alterar-grupo').value = btn.dataset.grupo;
+                if (btn.dataset.subgrupo !== '—') document.getElementById('alterar-subgrupo').value = btn.dataset.subgrupo;
+            } else if (dlg.id === 'dlg-excluir') {
+                document.getElementById('excluir-usuario-id').value = btn.dataset.usuarioId;
+                document.getElementById('excluir-nome').textContent = btn.dataset.nome;
+            }
+            dlg.showModal();
+        });
+    });
+
+    document.querySelectorAll('dialog').forEach(function (dlg) {
+        dlg.querySelectorAll('[data-fechar]').forEach(function (b) {
+            b.addEventListener('click', function () { dlg.close(); });
+        });
+        dlg.addEventListener('mousedown', function (e) { if (e.target === dlg) dlg.close(); });
+    });
+
+    // Menu de 3 pontinhos: copia os dados do usuário para os itens e posiciona junto ao botão
+    var menu = document.getElementById('menu-acoes');
+    function fecharMenu() { menu.classList.add('hidden'); }
+    document.querySelectorAll('[data-menu-acoes]').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            if (!menu.classList.contains('hidden') && menu.dataset.dono === btn.dataset.usuarioId) { fecharMenu(); return; }
+            menu.dataset.dono = btn.dataset.usuarioId;
+            menu.querySelectorAll('[data-abrir]').forEach(function (item) {
+                item.dataset.usuarioId = btn.dataset.usuarioId;
+                item.dataset.nome = btn.dataset.nome;
+                item.dataset.grupo = btn.dataset.grupo;
+                item.dataset.subgrupo = btn.dataset.subgrupo;
+            });
+            var ativo = !!btn.dataset.ativo;
+            document.getElementById('menu-acao-status').value = ativo ? 'inativar' : 'ativar';
+            document.getElementById('menu-usuario-status').value = btn.dataset.usuarioId;
+            document.getElementById('menu-status').textContent = ativo ? 'Inativar' : 'Ativar';
+            menu.classList.remove('hidden');
+            var r = btn.getBoundingClientRect();
+            var topo = r.bottom + 4;
+            if (topo + menu.offsetHeight > window.innerHeight) topo = r.top - menu.offsetHeight - 4;
+            menu.style.top = Math.max(4, topo) + 'px';
+            menu.style.left = Math.max(4, r.right - menu.offsetWidth) + 'px';
+        });
+    });
+    menu.querySelectorAll('[data-abrir]').forEach(function (item) { item.addEventListener('click', fecharMenu); });
+    document.addEventListener('click', function (e) { if (!menu.contains(e.target)) fecharMenu(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') fecharMenu(); });
+    window.addEventListener('scroll', fecharMenu, true);
+    window.addEventListener('resize', fecharMenu);
+
+    // Autocomplete do pop-up "Novo"
+    var busca = document.getElementById('busca-usuario');
+    var lista = document.getElementById('busca-resultados');
+    var status = document.getElementById('busca-status');
+    var selecionado = document.getElementById('busca-selecionado');
+    var campoUsername = document.querySelector('#form-novo input[name="username"]');
+    var btnCadastrar = document.getElementById('btn-cadastrar');
+    var timer = null, contador = 0;
+
+    function limparSelecao() {
+        campoUsername.value = '';
+        selecionado.classList.add('hidden');
+        btnCadastrar.disabled = true;
+    }
+
+    function escolher(u) {
+        campoUsername.value = u.username;
+        selecionado.textContent = u.nome + ' (' + u.username + ')' + (u.email ? ' — ' + u.email : '');
+        selecionado.classList.remove('hidden');
+        btnCadastrar.disabled = false;
+        lista.querySelectorAll('li').forEach(function (li) {
+            li.classList.toggle('bg-primary-50', li.dataset.username === u.username);
+        });
+    }
+
+    var disponiveis = [];  // lista completa carregada ao abrir o pop-up
+
+    function carregar(termo) {
+        var minha = ++contador;
+        status.textContent = 'Carregando…';
+        fetch(URL_BUSCA + (termo ? '?q=' + encodeURIComponent(termo) : ''), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.json(); })
+            .then(function (dados) {
+                if (minha !== contador) return;
+                var usuarios = dados.usuarios || [];
+                if (!termo) disponiveis = usuarios;
+                mostrar(usuarios);
+                status.textContent = dados.erro || (usuarios.length ? '' : 'Nenhum usuário disponível para cadastrar.');
+            })
+            .catch(function () { if (minha === contador) { mostrar([]); status.textContent = 'Falha ao buscar no AD.'; } });
+    }
+
+    function mostrar(usuarios) {
+        lista.replaceChildren();
+        lista.classList.toggle('hidden', usuarios.length === 0);
+        usuarios.forEach(function (u) {
+            var li = document.createElement('li');
+            li.dataset.username = u.username;
+            li.className = 'cursor-pointer px-3 py-2 hover:bg-primary-50';
+            li.textContent = u.nome + ' (' + u.username + ')';
+            li.addEventListener('click', function () { escolher(u); });
+            lista.appendChild(li);
+        });
+    }
+
+    // Vazio ou 1 letra: filtra a lista já carregada; 2+ letras: busca em todo o AD.
+    busca.addEventListener('input', function () {
+        limparSelecao();
+        clearTimeout(timer);
+        var termo = busca.value.trim();
+        if (termo.length < 2) {
+            var t = termo.toLowerCase();
+            mostrar(disponiveis.filter(function (u) {
+                return !t || u.nome.toLowerCase().indexOf(t) >= 0 || u.username.toLowerCase().indexOf(t) >= 0;
+            }));
+            status.textContent = '';
+            return;
+        }
+        timer = setTimeout(function () { carregar(termo); }, 300);
+    });
+
+    document.querySelector('[data-abrir="dlg-novo"]').addEventListener('click', function () {
+        busca.value = '';
+        limparSelecao();
+        carregar('');
+    });
+
+    document.getElementById('dlg-novo').addEventListener('close', function () {
+        contador++;
+        busca.value = '';
+        limparSelecao();
+        mostrar([]);
+        status.textContent = '';
+    });
+})();
+</script>
+{% endblock %}

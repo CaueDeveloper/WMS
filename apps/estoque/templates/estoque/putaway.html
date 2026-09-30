@@ -2,18 +2,19 @@
 
 {% block title %}Armazenagem — WMS{% endblock %}
 {% block titulo_pagina_coletor %}Armazenagem{% endblock %}
-{% block largura_coletor %}max-w-3xl{% endblock %}
+{% block nav_ativo_putaway %}nav-link-ativo{% endblock %}
+{% block largura_coletor %}max-w-3xl lg:max-w-none{% endblock %}
 
 {% block shell_content_coletor %}
 {% for mensagem in messages %}
-    <p class="{% if mensagem.tags == 'error' %}alert-error{% else %}alert-success{% endif %} text-lg">{{ mensagem }}</p>
+    <p class="{% if mensagem.tags == 'error' %}alert-error{% else %}alert-success{% endif %} text-lg lg:text-sm">{{ mensagem }}</p>
 {% endfor %}
 
 {% if lote %}
     <div class="card mb-4">
-        <p class="text-lg font-semibold text-slate-800 mb-1">Lote {{ lote }} — {{ paletes.0.sku }}</p>
-        <p class="text-base text-slate-600 mb-1">{{ paletes.0.descricao }}</p>
-        <p class="text-base text-slate-600 mb-2">{{ quantidade }} palete(s) — {{ peso_total }} kg</p>
+        <p class="text-lg lg:text-base font-semibold text-slate-800 mb-1">Lote {{ lote }} — {{ paletes.0.sku }}</p>
+        <p class="text-base lg:text-sm text-slate-600 mb-1">{{ paletes.0.descricao }}</p>
+        <p class="text-base lg:text-sm text-slate-600 mb-2">{{ quantidade }} palete(s) — {{ peso_total }} kg</p>
         <details>
             <summary class="cursor-pointer font-semibold text-sm">Ver barcodes</summary>
             <ul class="list-none mt-2 pl-0 text-sm">
@@ -22,11 +23,11 @@
         </details>
     </div>
 
-    <p class="mb-4"><a class="btn btn-secondary btn-block" href="{% url 'estoque:putaway' %}">Cancelar / escolher outro lote</a></p>
+    <p class="mb-4"><a class="btn btn-secondary btn-block lg:!w-auto" href="{% url 'estoque:putaway' %}">Cancelar / escolher outro lote</a></p>
 
-    <h2 class="text-lg mb-3">Escolha o Corredor</h2>
+    <h2 class="text-lg lg:text-base mb-3">Escolha o Corredor</h2>
     {% if sem_vagas %}
-        <p class="alert-error text-base">Não há nenhuma vaga livre no armazém no momento — nenhuma posição pode
+        <p class="alert-error text-base lg:text-sm">Não há nenhuma vaga livre no armazém no momento — nenhuma posição pode
         receber paletes. Retire paletes do mapa ou libere endereços antes de continuar.</p>
     {% elif modo_parcial %}
         <div class="card mb-4">
@@ -36,7 +37,7 @@
             restante continuará pendente. Repita a escolha (no mesmo andar ou em outro) até o lote acabar.</p>
         </div>
     {% else %}
-        <p class="text-base text-slate-600 mb-4">Clique em um corredor disponível para armazenar os {{ quantidade }} palete(s) do lote, cada um numa posição livre, a partir da primeira.</p>
+        <p class="text-base lg:text-sm text-slate-600 mb-4">Clique em um corredor disponível para armazenar os {{ quantidade }} palete(s) do lote, cada um numa posição livre, a partir da primeira.</p>
     {% endif %}
     {% include 'estoque/_filtro_andar.html' %}
     {% include 'estoque/_legenda_grade.html' %}
@@ -48,7 +49,8 @@
         {% include 'estoque/_grade_enderecos.html' with titulo=grade_titulo clicavel=True %}
     </form>
 {% else %}
-    <form method="post" autocomplete="off" class="form-card">
+    <p class="hidden lg:block text-sm text-slate-500 mb-4">Bipe um palete para localizar o lote a ser armazenado; abaixo, os paletes pendentes de armazenagem.</p>
+    <form method="post" autocomplete="off" class="form-card barra-form">
         {% csrf_token %}
         <header class="form-card-header">
             <h2 class="form-card-title">Armazenagem</h2>
@@ -56,12 +58,12 @@
         </header>
         <div class="form-card-body">
             <div id="linha-lote">
-                <label for="id_barcode_palete" class="text-base">Barcode</label>
-                <input type="text" name="barcode_palete" id="id_barcode_palete" class="input-field input-field-lg" autofocus autocomplete="off" required>
+                <label for="id_barcode_palete" class="text-base lg:text-sm">Barcode</label>
+                <input type="text" name="barcode_palete" id="id_barcode_palete" class="input-field input-field-lg lg:!text-sm lg:!py-2 lg:!px-3" autofocus autocomplete="off" required>
             </div>
         </div>
         <footer class="form-card-footer">
-            <button type="submit" class="btn btn-block btn-lg">Buscar</button>
+            <button type="submit" class="btn btn-block btn-lg lg:!w-auto lg:!text-sm lg:!py-2 lg:!px-4">Buscar</button>
         </footer>
     </form>
 

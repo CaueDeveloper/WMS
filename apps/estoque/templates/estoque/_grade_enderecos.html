@@ -4,7 +4,7 @@
     <thead>
         <tr>
             <th>Corredor</th>
-            {% for posicao in posicoes %}<th class="text-center px-1.5">{{ posicao|stringformat:"02d" }}</th>{% endfor %}
+            <th class="text-center" colspan="{{ posicoes|length }}">Guarda</th>
         </tr>
     </thead>
     <tbody>

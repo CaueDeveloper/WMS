@@ -14,7 +14,7 @@
     <label for="menu-toggle" class="hidden peer-checked:block lg:!hidden fixed inset-0 z-30 bg-slate-900/50"></label>
 
     <aside class="fixed inset-y-0 left-0 z-40 w-64 -translate-x-full peer-checked:translate-x-0 transition-transform duration-200 ease-in-out
-                   lg:static lg:z-auto lg:w-60 lg:shrink-0 lg:translate-x-0
+                   lg:sticky lg:top-0 lg:h-screen lg:z-auto lg:w-60 lg:shrink-0 lg:translate-x-0
                    flex flex-col bg-primary-700 text-white">
         <div class="flex items-center justify-between px-5 py-5 border-b border-white/10">
             <span class="text-sm font-semibold tracking-wide uppercase">WMS · Café do Sítio</span>
@@ -71,11 +71,8 @@
             {% endif %}
 
             {% if user|em_algum_grupo:"Administradores" %}
-            <a href="{% url 'atribuir_usuario_ad' %}" class="nav-link {% block nav_ativo_atribuir_ad %}{% endblock %}">
-                <span class="nav-icon">＋</span> Atribuir Usuário do AD
-            </a>
-            <a href="{% url 'ativar_usuarios' %}" class="nav-link {% block nav_ativo_ativar_usuarios %}{% endblock %}">
-                <span class="nav-icon">☑</span> Ativar Usuários
+            <a href="{% url 'usuarios' %}" class="nav-link {% block nav_ativo_usuarios %}{% endblock %}">
+                <span class="nav-icon">☺</span> Usuários
             </a>
             {% endif %}
         </nav>
@@ -86,7 +83,7 @@
     </aside>
 
     <div class="flex-1 min-w-0 flex flex-col">
-        <header class="flex items-center gap-3 bg-white border-b border-slate-200 px-4 py-3 lg:px-6">
+        <header class="sticky top-0 z-20 flex items-center gap-3 bg-white border-b border-slate-200 px-4 py-3 lg:px-6">
             <label for="menu-toggle" class="lg:hidden cursor-pointer text-slate-600 hover:text-primary-700 text-xl leading-none shrink-0" aria-label="Abrir menu">☰</label>
             <div class="flex items-center gap-3 min-w-0 flex-1">
                 {% block voltar_link %}{% endblock %}

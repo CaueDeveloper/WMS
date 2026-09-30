@@ -1,17 +1,18 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}Login — WMS Café do Sítio{% endblock %}
 
 {% block content %}
 <div class="min-h-screen flex items-center justify-center bg-slate-50 px-4">
     <div class="w-full max-w-sm">
-        <h1 class="text-center text-lg font-semibold text-slate-900 mb-6">Café do Sítio · WMS</h1>
         <form method="post" class="form-card">
             {% csrf_token %}
             <input type="hidden" name="next" value="{{ next }}">
-            <header class="form-card-header">
-                <h2 class="form-card-title">Acesso ao Sistema</h2>
-                <p class="form-card-subtitle">Entre com seu usuário e senha.</p>
+            <header class="form-card-header" style="padding-block: 1.5rem; text-align: center;">
+                <img src="{% static 'core/img/familia-do-sitio.png' %}" alt="Família do Sítio" style="height: 8rem; width: auto; margin: 0 auto 1rem;">
+                <h2 class="form-card-title">WMS</h2>
+                <p class="form-card-subtitle">Entre com seu usuário e senha de rede.</p>
             </header>
             <div class="form-card-body">
                 {% if form.non_field_errors %}

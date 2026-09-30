@@ -9,7 +9,8 @@
     <p class="{% if mensagem.tags == 'error' %}alert-error{% else %}alert-success{% endif %}">{{ mensagem }}</p>
 {% endfor %}
 
-<form method="get" autocomplete="off" class="form-card max-w-lg mx-auto mb-6">
+<p class="hidden lg:block text-sm text-slate-500 mb-4">Bipe o palete para ver o trajeto até o endereço de armazenagem.</p>
+<form method="get" autocomplete="off" class="form-card barra-form max-w-lg lg:max-w-none mb-6">
     <header class="form-card-header">
         <h2 class="form-card-title">Localizar Palete</h2>
         <p class="form-card-subtitle">Bipe o palete para ver o trajeto até o endereço de armazenagem.</p>
@@ -27,7 +28,7 @@
 
 {% if grupo %}
     {% include 'estoque/_legenda_grade.html' %}
-    <div class="flex flex-wrap justify-center gap-4 text-xs text-slate-500 mb-4">
+    <div class="flex flex-wrap gap-4 text-xs text-slate-500 mb-4">
         <span class="inline-flex items-center gap-1.5"><span class="w-4 h-4 rounded border-2 border-primary-600 bg-primary-100 inline-block"></span> ● Início do trajeto</span>
         <span class="inline-flex items-center gap-1.5"><span class="w-4 h-4 rounded border-2 border-primary-600 bg-primary-50 inline-block"></span> → Caminho até o destino</span>
         <span class="inline-flex items-center gap-1.5"><span class="w-4 h-4 rounded border-2 border-danger-500 bg-danger-50 inline-block"></span> ★ Endereço de destino</span>

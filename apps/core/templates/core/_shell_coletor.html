@@ -1,19 +1,13 @@
-{% extends 'base.html' %}
-{# Shell simplificado para telas de coletor (Zebra MC2700): sem sidebar, apenas
-   topbar + área de conteúdo estreita e centralizada, com alvos de toque grandes.
-   Páginas devem extender este template e preencher os blocks titulo_pagina_coletor,
-   acao_topbar_coletor (opcional) e shell_content_coletor. #}
+{% extends 'core/_shell.html' %}
+{# Telas de coletor (Zebra MC2700) agora usam o mesmo shell das demais (sidebar + topbar
+   fixas); este template só mantém os nomes de block antigos e centraliza o conteúdo numa
+   coluna estreita. Páginas devem extender este template e preencher os blocks
+   titulo_pagina_coletor, shell_content_coletor e (opcional) largura_coletor. #}
 
-{% block content %}
-<div class="min-h-screen flex flex-col">
-    <header class="flex items-center justify-between gap-3 bg-primary-700 text-white px-4 py-3">
-        <strong class="text-base truncate">{% block titulo_pagina_coletor %}{% endblock %}</strong>
-        {% block acao_topbar_coletor %}
-        <a href="{% url 'home' %}" class="text-sm border border-white/50 rounded px-3 py-1.5 hover:bg-white/10">Início</a>
-        {% endblock %}
-    </header>
-    <main class="flex-1 {% block largura_coletor %}max-w-md{% endblock %} w-full mx-auto px-4 py-6">
-        {% block shell_content_coletor %}{% endblock %}
-    </main>
+{% block titulo_pagina %}{% block titulo_pagina_coletor %}{% endblock %}{% endblock %}
+
+{% block shell_content %}
+<div class="{% block largura_coletor %}max-w-md{% endblock %} w-full mx-auto">
+    {% block shell_content_coletor %}{% endblock %}
 </div>
 {% endblock %}

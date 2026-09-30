@@ -1,231 +1,209 @@
 {% extends 'core/_shell.html' %}
+{% load static %}
 
 {% block title %}Estatísticas — WMS{% endblock %}
 {% block titulo_pagina %}Estatísticas{% endblock %}
 {% block nav_ativo_estatisticas %}nav-link-ativo{% endblock %}
 
 {% block extra_head %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{% static 'core/js/chart.umd.min.js' %}"></script>
 {% endblock %}
 
 {% block shell_content %}
-<form method="get" id="form-filtros-estatisticas" onsubmit="return false;">
-    <section class="form-card mb-6">
-        <header class="form-card-header">
-            <h2 class="form-card-title">Paletes Criados</h2>
-            <p class="form-card-subtitle">Filtre por período e produto.</p>
-        </header>
-        <div class="form-card-body sm:grid sm:grid-cols-3">
-            <div>
-                <label for="criados_de">De</label>
-                <input type="date" id="criados_de" name="criados_de" class="input-field" value="{{ criados_de }}">
-            </div>
-            <div>
-                <label for="criados_ate">Até</label>
-                <input type="date" id="criados_ate" name="criados_ate" class="input-field" value="{{ criados_ate }}">
-            </div>
-            <div>
-                <label for="criados_sku">Produto</label>
-                <select id="criados_sku" name="criados_sku" class="input-field">
-                    <option value="">Todos</option>
-                    {% for produto in produtos_disponiveis %}
-                    <option value="{{ produto.sku }}" {% if produto.sku == criados_sku %}selected{% endif %}>{{ produto.sku }} — {{ produto.descricao }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-        </div>
+<div class="flex items-center justify-between gap-3 mb-4">
+    <p class="text-sm text-slate-500">
+        Gráficos atualizados automaticamente a cada 10 minutos.
+        Última atualização: <span id="ultima-atualizacao" class="font-medium text-slate-700">{% now "H:i:s" %}</span>
+    </p>
+    <button type="button" id="btn-atualizar" class="btn btn-secondary shrink-0">↻ Atualizar agora</button>
+</div>
+
+{% include 'core/_estat_kpis.html' %}
+{{ dados|json_script:"estat-dados" }}
+
+<div class="grid gap-6 mb-6 xl:grid-cols-2">
+    <section class="card-plain">
+        <h2 class="mb-1">Fluxo diário de paletes</h2>
+        <p class="text-xs text-slate-500 mb-3">Paletes por dia em cada etapa: criados{% if pode_ver_producao %}, aprovados pela Produção{% endif %}{% if pode_ver_logistica %}, recebidos pela Logística{% endif %}.</p>
+        <div class="relative h-72"><canvas id="grafico-fluxo"></canvas></div>
     </section>
 
-    {% if pode_ver_producao %}
-    <section class="form-card mb-6">
-        <header class="form-card-header">
-            <h2 class="form-card-title">Lotes Aprovados — Transferência da Produção</h2>
-            <p class="form-card-subtitle">Filtre por período e produto.</p>
-        </header>
-        <div class="form-card-body sm:grid sm:grid-cols-3">
-            <div>
-                <label for="producao_de">De</label>
-                <input type="date" id="producao_de" name="producao_de" class="input-field" value="{{ producao_de }}">
-            </div>
-            <div>
-                <label for="producao_ate">Até</label>
-                <input type="date" id="producao_ate" name="producao_ate" class="input-field" value="{{ producao_ate }}">
-            </div>
-            <div>
-                <label for="producao_sku">Produto</label>
-                <select id="producao_sku" name="producao_sku" class="input-field">
-                    <option value="">Todos</option>
-                    {% for produto in produtos_disponiveis %}
-                    <option value="{{ produto.sku }}" {% if produto.sku == producao_sku %}selected{% endif %}>{{ produto.sku }} — {{ produto.descricao }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-        </div>
+    <section class="card-plain">
+        <h2 class="mb-1">Paletes criados por dia</h2>
+        <p class="text-xs text-slate-500 mb-3">Os 5 produtos de maior volume; os demais somados em "Outros".</p>
+        <div class="relative h-72"><canvas id="grafico-criados"></canvas></div>
     </section>
-    {% endif %}
+</div>
 
-    {% if pode_ver_logistica %}
-    <section class="form-card mb-6">
-        <header class="form-card-header">
-            <h2 class="form-card-title">Lotes Aprovados — Transferência da Logística</h2>
-            <p class="form-card-subtitle">Filtre por período e produto.</p>
-        </header>
-        <div class="form-card-body sm:grid sm:grid-cols-3">
-            <div>
-                <label for="logistica_de">De</label>
-                <input type="date" id="logistica_de" name="logistica_de" class="input-field" value="{{ logistica_de }}">
-            </div>
-            <div>
-                <label for="logistica_ate">Até</label>
-                <input type="date" id="logistica_ate" name="logistica_ate" class="input-field" value="{{ logistica_ate }}">
-            </div>
-            <div>
-                <label for="logistica_sku">Produto</label>
-                <select id="logistica_sku" name="logistica_sku" class="input-field">
-                    <option value="">Todos</option>
-                    {% for produto in produtos_disponiveis %}
-                    <option value="{{ produto.sku }}" {% if produto.sku == logistica_sku %}selected{% endif %}>{{ produto.sku }} — {{ produto.descricao }}</option>
-                    {% endfor %}
-                </select>
-            </div>
+<section class="card-plain mb-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <div>
+            <h2 class="mb-1">Por produto</h2>
+            <p class="text-xs text-slate-500">Maiores produtos em paletes criados.</p>
         </div>
-    </section>
-    {% endif %}
-</form>
-
-{% include 'core/_resultados_estatisticas.html' %}
+        <div class="inline-flex rounded border border-slate-300 overflow-hidden text-sm" role="group" aria-label="Métrica">
+            <button type="button" class="px-3 py-1.5 bg-primary-600 text-white" data-metrica="quantidades">Quantidade</button>
+            <button type="button" class="px-3 py-1.5 bg-white text-slate-700 hover:bg-slate-50" data-metrica="pesos">Peso (kg)</button>
+        </div>
+    </div>
+    <div class="relative mb-5" id="wrap-grafico-produto"><canvas id="grafico-produto"></canvas></div>
+    {% include 'core/_estat_tabela.html' %}
+</section>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 (function () {
+    var INTERVALO_MS = 10 * 60 * 1000;
+    var CORES = ['#1d4e45', '#d99a2b', '#2b7fa6', '#ad3b2c', '#5b4b8a'];
+    var COR_OUTROS = '#94a3b8';
+    var COR_ETAPAS = { criados: '#1d4e45', producao: '#d99a2b', logistica: '#2b7fa6' };
+    var METRICAS = {
+        quantidades: { rotulo: 'Quantidade de paletes', cor: '#1d4e45' },
+        pesos: { rotulo: 'Peso total (kg)', cor: '#ad3b2c' },
+    };
+
     var graficos = {};
+    var dados = lerDados(document);
+    var metrica = 'quantidades';
 
-    var PALETA_CORES = ['#1d4e45', '#ad3b2c', '#256359', '#d99a2b', '#5b4b8a', '#2b7fa6', '#8a5b2b', '#7a2b5b'];
-
-    function lerDados(id) {
-        var el = document.getElementById(id);
-        return el ? JSON.parse(el.textContent) : null;
+    function lerDados(raiz) {
+        return JSON.parse(raiz.getElementById('estat-dados').textContent);
     }
 
-    function corParaIndice(indice) {
-        return PALETA_CORES[indice % PALETA_CORES.length];
+    function dataCurta(iso) {
+        return iso.slice(8, 10) + '/' + iso.slice(5, 7);
     }
 
-    function datasetsEmpilhadosPorSku(datasetsPorSku) {
-        return datasetsPorSku.map(function (dataset, indice) {
+    function datasetsFluxo(d) {
+        var etapas = [
+            ['criados', 'Criados'],
+            ['producao', 'Aprovados — Produção'],
+            ['logistica', 'Recebidos — Logística'],
+        ];
+        return etapas.filter(function (e) { return d.fluxo[e[0]] !== null; }).map(function (e) {
             return {
-                label: dataset.sku,
-                data: dataset.valores,
-                backgroundColor: corParaIndice(indice),
+                label: e[1],
+                data: d.fluxo[e[0]],
+                borderColor: COR_ETAPAS[e[0]],
+                backgroundColor: COR_ETAPAS[e[0]],
+                tension: 0.25,
+            };
+        });
+    }
+
+    function datasetsCriados(d) {
+        return d.criados.datasets.map(function (ds, i) {
+            return {
+                label: ds.sku,
+                data: ds.valores,
+                backgroundColor: ds.sku === 'Outros' ? COR_OUTROS : CORES[i % CORES.length],
                 stack: 'total',
             };
         });
     }
 
-    function destruirGraficos() {
-        Object.keys(graficos).forEach(function (chave) {
-            if (graficos[chave]) {
-                graficos[chave].destroy();
-            }
+    function datasetProduto(d) {
+        return [{ label: METRICAS[metrica].rotulo, data: d.produto[metrica], backgroundColor: METRICAS[metrica].cor }];
+    }
+
+    function ajustarAlturaProduto(d) {
+        // barras horizontais: altura proporcional ao número de produtos
+        document.getElementById('wrap-grafico-produto').style.height = Math.max(160, d.produto.labels.length * 30 + 50) + 'px';
+    }
+
+    function criarGraficos() {
+        var base = { responsive: true, maintainAspectRatio: false };
+
+        graficos.fluxo = new Chart(document.getElementById('grafico-fluxo'), {
+            type: 'line',
+            data: { labels: dados.fluxo.labels.map(dataCurta), datasets: datasetsFluxo(dados) },
+            options: Object.assign({}, base, {
+                interaction: { mode: 'index', intersect: false },
+                scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+            }),
         });
-        graficos = {};
+
+        graficos.criados = new Chart(document.getElementById('grafico-criados'), {
+            type: 'bar',
+            data: { labels: dados.criados.labels.map(dataCurta), datasets: datasetsCriados(dados) },
+            options: Object.assign({}, base, {
+                scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } },
+            }),
+        });
+
+        ajustarAlturaProduto(dados);
+        graficos.produto = new Chart(document.getElementById('grafico-produto'), {
+            type: 'bar',
+            data: { labels: dados.produto.labels, datasets: datasetProduto(dados) },
+            options: Object.assign({}, base, {
+                indexAxis: 'y',
+                plugins: { legend: { display: false } },
+                scales: { x: { beginAtZero: true } },
+            }),
+        });
     }
 
-    function desenharGraficos() {
-        var criados = lerDados('dados-grafico-criados');
-        if (criados) {
-            graficos.criados = new Chart(document.getElementById('grafico-criados'), {
-                type: 'bar',
-                data: {
-                    labels: criados.labels,
-                    datasets: datasetsEmpilhadosPorSku(criados.datasets),
-                },
-                options: {
-                    responsive: true,
-                    scales: { x: { stacked: true }, y: { stacked: true } },
-                },
-            });
-        }
-
-        var produto = lerDados('dados-grafico-produto');
-        if (produto) {
-            graficos.produtoQuantidade = new Chart(document.getElementById('grafico-produto-quantidade'), {
-                type: 'bar',
-                data: { labels: produto.labels, datasets: [{ label: 'Quantidade de paletes', data: produto.quantidades, backgroundColor: '#1d4e45' }] },
-                options: { responsive: true },
-            });
-            graficos.produtoPeso = new Chart(document.getElementById('grafico-produto-peso'), {
-                type: 'bar',
-                data: { labels: produto.labels, datasets: [{ label: 'Peso total (kg)', data: produto.pesos, backgroundColor: '#ad3b2c' }] },
-                options: { responsive: true },
-            });
-        }
-
-        var producao = lerDados('dados-grafico-producao');
-        if (producao) {
-            graficos.producao = new Chart(document.getElementById('grafico-producao'), {
-                type: 'bar',
-                data: {
-                    labels: producao.labels,
-                    datasets: datasetsEmpilhadosPorSku(producao.datasets),
-                },
-                options: {
-                    responsive: true,
-                    scales: { x: { stacked: true }, y: { stacked: true } },
-                },
-            });
-        }
-
-        var logistica = lerDados('dados-grafico-logistica');
-        if (logistica) {
-            graficos.logistica = new Chart(document.getElementById('grafico-logistica'), {
-                type: 'bar',
-                data: {
-                    labels: logistica.labels,
-                    datasets: datasetsEmpilhadosPorSku(logistica.datasets),
-                },
-                options: {
-                    responsive: true,
-                    scales: { x: { stacked: true }, y: { stacked: true } },
-                },
-            });
-        }
+    // Atualiza os gráficos no lugar (sem destruir), animando para os valores novos
+    function atualizarGraficos() {
+        graficos.fluxo.data.labels = dados.fluxo.labels.map(dataCurta);
+        graficos.fluxo.data.datasets = datasetsFluxo(dados);
+        graficos.criados.data.labels = dados.criados.labels.map(dataCurta);
+        graficos.criados.data.datasets = datasetsCriados(dados);
+        ajustarAlturaProduto(dados);
+        graficos.produto.data.labels = dados.produto.labels;
+        graficos.produto.data.datasets = datasetProduto(dados);
+        Object.keys(graficos).forEach(function (k) { graficos[k].update(); });
     }
 
-    desenharGraficos();
-
-    var form = document.getElementById('form-filtros-estatisticas');
-    var resultados = document.getElementById('resultados-estatisticas');
-    var timeoutId = null;
-
-    function aplicarFiltros() {
-        var baseUrl = resultados.dataset.baseUrl;
-        var params = new URLSearchParams(new FormData(form));
-        var url = baseUrl + '?' + params.toString();
-
-        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-            .then(function (resposta) { return resposta.text(); })
-            .then(function (html) {
-                destruirGraficos();
-                resultados.outerHTML = html;
-                resultados = document.getElementById('resultados-estatisticas');
-                desenharGraficos();
-                window.history.replaceState(null, '', url);
-            })
-            .catch(function () {
-                form.submit();
+    document.querySelectorAll('[data-metrica]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            metrica = btn.dataset.metrica;
+            document.querySelectorAll('[data-metrica]').forEach(function (b) {
+                var ativo = b === btn;
+                b.classList.toggle('bg-primary-600', ativo);
+                b.classList.toggle('text-white', ativo);
+                b.classList.toggle('bg-white', !ativo);
+                b.classList.toggle('text-slate-700', !ativo);
             });
-    }
-
-    form.addEventListener('change', function (evento) {
-        if (evento.target.matches('input[type="date"], select')) {
-            if (timeoutId) {
-                clearTimeout(timeoutId);
-            }
-            timeoutId = setTimeout(aplicarFiltros, 150);
-        }
+            graficos.produto.data.datasets = datasetProduto(dados);
+            graficos.produto.update();
+        });
     });
+
+    criarGraficos();
+
+    var rotuloAtualizacao = document.getElementById('ultima-atualizacao');
+    var botao = document.getElementById('btn-atualizar');
+    var atualizando = false;
+
+    function atualizar() {
+        if (atualizando) return;
+        atualizando = true;
+        botao.disabled = true;
+
+        fetch(window.location.pathname, { cache: 'no-store', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (resposta) {
+                if (!resposta.ok) throw new Error('HTTP ' + resposta.status);
+                return resposta.text();
+            })
+            .then(function (html) {
+                var novo = new DOMParser().parseFromString(html, 'text/html');
+                document.getElementById('estat-kpis').replaceWith(novo.getElementById('estat-kpis'));
+                document.getElementById('estat-tabela').replaceWith(novo.getElementById('estat-tabela'));
+                dados = lerDados(novo);
+                atualizarGraficos();
+                rotuloAtualizacao.textContent = new Date().toLocaleTimeString('pt-BR');
+            })
+            .catch(function () { /* mantém a tela atual e tenta de novo no próximo ciclo */ })
+            .then(function () {
+                atualizando = false;
+                botao.disabled = false;
+            });
+    }
+
+    botao.addEventListener('click', atualizar);
+    setInterval(atualizar, INTERVALO_MS);
 })();
 </script>
 {% endblock %}

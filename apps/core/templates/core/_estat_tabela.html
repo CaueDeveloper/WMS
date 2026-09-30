@@ -1,0 +1,17 @@
+<div id="estat-tabela" class="overflow-x-auto">
+    <table class="table-admin">
+        <thead><tr><th>SKU</th><th>Descrição</th><th>Quantidade</th><th>Peso Total (kg)</th></tr></thead>
+        <tbody>
+            {% for item in por_produto %}
+            <tr>
+                <td>{{ item.sku }}</td>
+                <td>{{ item.descricao }}</td>
+                <td>{{ item.quantidade }}</td>
+                <td>{{ item.peso_total|floatformat:3 }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="text-center text-slate-500">Nenhum palete criado.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

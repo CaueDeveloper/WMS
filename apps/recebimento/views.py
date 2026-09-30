@@ -17,6 +17,7 @@ from .zpl import disparar_impressao_async
 
 PESO_FIXO_RECEBIMENTO_KG = Decimal('500')
 GRUPOS_POR_PAGINA_TRANSFERENCIA = 5
+PALETES_RECENTES_NA_TELA = 20
 
 
 @group_required('Administradores', 'Operador Produção')
@@ -52,7 +53,10 @@ def receber_palete(request):
     else:
         form = RecebimentoForm()
 
-    return render(request, 'recebimento/receber_palete.html', {'form': form})
+    return render(request, 'recebimento/receber_palete.html', {
+        'form': form,
+        'paletes_recentes': Palete.objects.order_by('-criado_em', '-pk')[:PALETES_RECENTES_NA_TELA],
+    })
 
 
 def _bipar_para_transferencia(request, barcode):

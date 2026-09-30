@@ -2,12 +2,55 @@
 
 {% block title %}Recebimento — WMS{% endblock %}
 {% block titulo_pagina_coletor %}Recebimento{% endblock %}
+{% block nav_ativo_recebimento %}nav-link-ativo{% endblock %}
+{% block largura_coletor %}max-w-md lg:max-w-none{% endblock %}
 
 {% block shell_content_coletor %}
 {% for mensagem in messages %}
-    <p class="{% if mensagem.tags == 'error' %}alert-error{% else %}alert-success{% endif %} text-lg">{{ mensagem }}</p>
+    <p class="{% if mensagem.tags == 'error' %}alert-error{% else %}alert-success{% endif %} text-lg lg:text-sm">{{ mensagem }}</p>
 {% endfor %}
 
+{# Desktop: texto de apoio + botão "Nova etiqueta" e tabela dos últimos paletes (mesmo padrão da tela Usuários) #}
+<div class="hidden lg:flex items-center justify-between gap-3 mb-4">
+    <p class="text-sm text-slate-500">Emissão de etiquetas e últimos paletes criados.</p>
+    <button type="button" class="btn shrink-0" id="abrir-etiqueta">＋ Nova etiqueta</button>
+</div>
+
+<div class="hidden lg:block">
+{% if paletes_recentes %}
+    <div class="overflow-x-auto">
+    <table class="table-admin">
+        <thead>
+            <tr>
+                <th>Barcode</th>
+                <th>Lote</th>
+                <th>SKU</th>
+                <th>Descrição</th>
+                <th>Peso (kg)</th>
+                <th>Criado em</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for palete in paletes_recentes %}
+            <tr>
+                <td>{{ palete.barcode_palete }}</td>
+                <td>{{ palete.lote }}</td>
+                <td>{{ palete.sku }}</td>
+                <td>{{ palete.descricao }}</td>
+                <td>{{ palete.peso_kg }}</td>
+                <td>{{ palete.criado_em|date:"d/m/Y H:i" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% else %}
+    <p class="text-sm text-slate-500">Nenhum palete criado ainda. Clique em "Nova etiqueta" para emitir.</p>
+{% endif %}
+</div>
+
+{# No celular o formulário fica inline (o <dialog> é forçado a aparecer); no desktop é um pop-up #}
+<dialog id="dlg-etiqueta" class="dialog-form"{% if form.errors %} data-abrir-ao-carregar{% endif %}>
 <form method="post" class="form-card">
     {% csrf_token %}
     <header class="form-card-header">
@@ -17,16 +60,18 @@
     <div class="form-card-body">
         {% for campo in form %}
             <div id="linha-{{ campo.name }}">
-                <label for="{{ campo.id_for_label }}" class="text-base">{{ campo.label }}</label>
+                <label for="{{ campo.id_for_label }}" class="text-base lg:text-sm">{{ campo.label }}</label>
                 {{ campo }}
-                {% for erro in campo.errors %}<p class="alert-error text-base mt-2 mb-0">{{ erro }}</p>{% endfor %}
+                {% for erro in campo.errors %}<p class="alert-error text-base lg:text-sm mt-2 mb-0">{{ erro }}</p>{% endfor %}
             </div>
         {% endfor %}
     </div>
     <footer class="form-card-footer">
-        <button type="submit" class="btn btn-block btn-lg">Emitir Etiqueta</button>
+        <button type="button" class="btn btn-secondary hidden lg:inline-flex" data-fechar>Cancelar</button>
+        <button type="submit" class="btn btn-block btn-lg lg:!w-auto lg:!text-sm lg:!py-2 lg:!px-4">Emitir Etiqueta</button>
     </footer>
 </form>
+</dialog>
 {% endblock %}
 
 {% block extra_js %}
@@ -47,6 +92,15 @@
 
     selectPesoVariavel.addEventListener('change', atualizarCampoPeso);
     atualizarCampoPeso();
+
+    // Pop-up só em tela grande (no celular o <dialog> fica inline, sempre visível)
+    var dlg = document.getElementById('dlg-etiqueta');
+    var telaGrande = window.matchMedia('(min-width: 1024px)');
+    function abrirPopup() { if (telaGrande.matches && !dlg.open) dlg.showModal(); }
+    document.getElementById('abrir-etiqueta').addEventListener('click', abrirPopup);
+    dlg.querySelector('[data-fechar]').addEventListener('click', function () { dlg.close(); });
+    dlg.addEventListener('mousedown', function (e) { if (e.target === dlg) dlg.close(); });
+    if (dlg.hasAttribute('data-abrir-ao-carregar')) abrirPopup();  // reabre para mostrar erros de validação
 })();
 </script>
 {% endblock %}

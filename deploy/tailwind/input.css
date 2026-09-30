@@ -136,6 +136,31 @@
     @apply bg-slate-50 border-t border-slate-200 px-6 py-4 flex justify-end gap-3;
   }
 
+  /* Formulário de bipagem: cartão no celular/coletor; em tela grande vira uma barra
+     compacta (campo + botão na mesma linha) acima da tabela, sem o cabeçalho verde. */
+  .barra-form {
+    @apply lg:flex lg:items-end lg:gap-4 lg:rounded lg:border lg:border-slate-200 lg:bg-white lg:p-4 lg:shadow-none;
+  }
+  .barra-form .form-card-header {
+    @apply lg:hidden;
+  }
+  .barra-form .form-card-body {
+    @apply lg:flex-1 lg:flex-row lg:items-end lg:gap-4 lg:p-0;
+  }
+  .barra-form .form-card-body > div {
+    @apply lg:max-w-md;
+  }
+  .barra-form .form-card-footer {
+    @apply lg:border-0 lg:bg-transparent lg:p-0;
+  }
+
+  /* <dialog> com formulário: pop-up centralizado em tela grande; no celular fica sempre
+     aberto, inline na página (como era antes do pop-up existir). */
+  .dialog-form {
+    @apply fixed inset-0 m-auto h-fit max-h-[90vh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-lg p-0 shadow-xl backdrop:bg-slate-900/50
+           max-lg:static max-lg:block max-lg:m-0 max-lg:w-full max-lg:max-w-none max-lg:overflow-visible max-lg:bg-transparent max-lg:shadow-none;
+  }
+
   /* Selos / badges de status */
   .badge-success {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide

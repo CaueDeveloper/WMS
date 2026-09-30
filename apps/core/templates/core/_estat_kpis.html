@@ -1,0 +1,20 @@
+<div id="estat-kpis" class="flex flex-wrap gap-4 mb-6">
+    <div class="card-plain border-t-2 border-t-primary-600 flex-1 min-w-[180px]">
+        <div class="text-xs uppercase text-slate-500 tracking-wide">Paletes criados</div>
+        <div class="text-2xl font-bold text-primary-700">{{ total_paletes_criados }}</div>
+    </div>
+    {% if pode_ver_producao %}
+    <div class="card-plain border-t-2 border-t-primary-600 flex-1 min-w-[180px]">
+        <div class="text-xs uppercase text-slate-500 tracking-wide">Lotes aprovados — Produção</div>
+        <div class="text-2xl font-bold text-primary-700">{{ total_lotes_producao }}</div>
+        <div class="text-xs text-slate-500">{{ peso_total_producao|floatformat:3 }} kg</div>
+    </div>
+    {% endif %}
+    {% if pode_ver_logistica %}
+    <div class="card-plain border-t-2 border-t-primary-600 flex-1 min-w-[180px]">
+        <div class="text-xs uppercase text-slate-500 tracking-wide">Lotes recebidos — Logística</div>
+        <div class="text-2xl font-bold text-primary-700">{{ total_lotes_logistica }}</div>
+        <div class="text-xs text-slate-500">{{ peso_total_logistica|floatformat:3 }} kg</div>
+    </div>
+    {% endif %}
+</div>

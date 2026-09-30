@@ -3,8 +3,8 @@
 AUTH_LDAP_MIRROR_GROUPS criaria um auth.Group por cn do AD, o que não bate
 com os nomes usados por @group_required em todo o projeto ("Operador
 Produção", "Gestor Logística" etc.) a menos que o AD tenha grupos com esses
-nomes exatos — não é o caso aqui. Em vez disso, cada usuário autenticado via
-LDAP tem seus grupos Django recalculados a partir do DN de grupo do AD a que
+nomes exatos — não é o caso aqui. Em vez disso, o usuário autenticado via
+LDAP pela primeira vez tem seus grupos Django definidos a partir do DN de grupo do AD a que
 pertence, usando o mapeamento AUTH_LDAP_GROUP_DN_MAP (settings.py, montado a
 partir das variáveis AUTH_LDAP_GROUP_DN_* do .env).
 """
@@ -20,10 +20,10 @@ def _mapear_grupos_ldap(sender, user, ldap_user, **kwargs):
     if not mapa:
         return
 
-    if user.pk and getattr(user, 'perfil', None) and user.perfil.atribuido_manualmente:
-        # Grupo definido manualmente pelo Administrador (tela de atribuição do
-        # AD) — não sobrescrever com o mapeamento automático (que daria
-        # Operador+Gestor juntos, ver comentário [TRANSIÇÃO] em settings.py).
+    if user.pk:
+        # Só o primeiro acesso puxa o grupo do AD. Depois disso o grupo é do WMS
+        # (definido/alterado pelo Administrador na tela de atribuição) e não é
+        # sobrescrito a cada login.
         return
 
     dns_do_usuario = {dn.lower() for dn in ldap_user.group_dns}
@@ -34,18 +34,13 @@ def _mapear_grupos_ldap(sender, user, ldap_user, **kwargs):
         for nome in nomes
     }
 
-    usuario_novo = not user.pk
-    if usuario_novo and nomes_dos_grupos & GRUPOS_INATIVOS_POR_PADRAO:
+    if nomes_dos_grupos & GRUPOS_INATIVOS_POR_PADRAO:
         user.is_active = False
 
-    if usuario_novo:
-        user.save()
+    user.save()
 
-    grupos_mapeados = {nome for nomes in mapa.values() for nome in nomes}
-    user.groups.remove(*Group.objects.filter(name__in=grupos_mapeados))
     if nomes_dos_grupos:
-        grupos = Group.objects.filter(name__in=nomes_dos_grupos)
-        user.groups.add(*grupos)
+        user.groups.add(*Group.objects.filter(name__in=nomes_dos_grupos))
 
 
 populate_user.connect(_mapear_grupos_ldap)

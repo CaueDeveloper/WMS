@@ -1,5 +1,4 @@
 from collections import Counter
-from datetime import date
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -12,10 +11,12 @@ from django.shortcuts import redirect, render
 
 from apps.recebimento.models import Palete, PaleteHistorico
 
-from .constants import GRUPOS_INATIVOS_POR_PADRAO
 from .decorators import group_required
-from .forms import AtribuicaoUsuarioADForm
-from .ldap_lookup import LdapIndisponivelError, buscar_usuarios_ad
+from .forms import AlterarGrupoUsuarioForm, NovoUsuarioForm
+from .ldap_lookup import (
+    GRUPOS_ATRIBUIVEIS, PAPEIS, SETORES, LdapIndisponivelError, buscar_usuarios_ad, listar_usuarios_ad, nome_grupo_django,
+    obter_usuario_ad,
+)
 from .models import PerfilUsuario
 
 TOP_N_PRODUTOS_GRAFICO = 15
@@ -28,98 +29,171 @@ def home(request):
 
 @group_required('Administradores')
 def buscar_usuarios_ad_json(request):
-    """Autocomplete da tela de atribuição: usuários do AD (todos) que casam
-    com `?q=` e ainda não têm usuário no WMS."""
+    """Lista do pop-up "Novo": sem `?q=`, os usuários de Produção/Logística do
+    AD ainda sem usuário no WMS; com `?q=`, busca em todo o AD."""
     try:
-        usuarios = buscar_usuarios_ad(request.GET.get('q', ''))
+        termo = request.GET.get('q', '').strip()
+        usuarios = buscar_usuarios_ad(termo) if termo else listar_usuarios_ad()
     except LdapIndisponivelError as exc:
         return JsonResponse({'erro': str(exc), 'usuarios': []})
+    except Exception:
+        return JsonResponse({'erro': 'Falha ao consultar o AD.', 'usuarios': []})
     return JsonResponse({'usuarios': usuarios})
 
 
-@group_required('Administradores')
-def atribuir_usuario_ad(request):
-    """Permite ao Administrador buscar qualquer usuário do AD (digitando) e
-    criar o usuário no WMS já definindo o grupo — necessário porque o AD
-    ainda não distingue os papéis (ver [TRANSIÇÃO] em wms/settings.py)."""
-    if request.method == 'POST':
-        form = AtribuicaoUsuarioADForm(request.POST)
-        if form.is_valid():
-            username = form.cleaned_data['username']
-            nome = form.cleaned_data['nome']
-            nome_grupo = form.cleaned_data['grupo']
+def _grupo_e_subgrupo(usuario):
+    """Separa o grupo Django de Produção/Logística do usuário em (setor, papel),
+    ex.: "Gestor Produção" -> ("Produção", "Gestor"). Usuário sem grupo
+    atribuível volta ("—", "—")."""
+    nomes = {g.name for g in usuario.groups.all()}
+    for setor in SETORES:
+        for papel in PAPEIS:
+            if nome_grupo_django(setor, papel) in nomes:
+                return setor, papel
+    return '—', '—'
 
-            User = get_user_model()
-            if User.objects.filter(username=username).exists():
-                messages.error(request, f'O usuário "{username}" já existe no WMS.')
+
+def _aplicar_grupo(usuario, setor, papel):
+    """Troca o papel do usuário: remove os grupos de Produção/Logística atuais e
+    aplica o novo. atribuido_manualmente impede o login LDAP de sobrescrevê-lo."""
+    usuario.groups.remove(*Group.objects.filter(name__in=GRUPOS_ATRIBUIVEIS))
+    usuario.groups.add(Group.objects.get(name=nome_grupo_django(setor, papel)))
+    PerfilUsuario.objects.update_or_create(user=usuario, defaults={'atribuido_manualmente': True})
+
+
+def _usuarios_gerenciaveis():
+    User = get_user_model()
+    return (
+        User.objects.filter(is_superuser=False)
+        .exclude(groups__name='Administradores')
+        .prefetch_related('groups')
+        .order_by('first_name', 'last_name', 'username')
+    )
+
+
+def _usuario_gerenciavel_por_pk(pk):
+    return _usuarios_gerenciaveis().filter(pk=pk).first() if str(pk).isdigit() else None
+
+
+@group_required('Administradores')
+def usuarios(request):
+    """Lista os usuários do WMS (Nome, Email, Grupo, Subgrupo) e trata, via POST,
+    as ações do Administrador: `novo` (pop-up que busca o usuário no AD e o
+    atribui a um grupo), `alterar_grupo` e `excluir`. A atribuição manual é
+    necessária porque o AD ainda não distingue os papéis (ver [TRANSIÇÃO] em
+    wms/settings.py)."""
+    User = get_user_model()
+
+    if request.method == 'POST':
+        acao = request.POST.get('acao')
+
+        if acao == 'novo':
+            form = NovoUsuarioForm(request.POST)
+            if not form.is_valid():
+                messages.error(request, 'Selecione um usuário do AD, o grupo e o subgrupo.')
+                return redirect('usuarios')
+            username = form.cleaned_data['username']
+            try:
+                usuario_ad = obter_usuario_ad(username)
+            except LdapIndisponivelError as exc:
+                messages.error(request, str(exc))
+                return redirect('usuarios')
+            except Exception:
+                messages.error(request, 'Falha ao consultar o AD.')
+                return redirect('usuarios')
+
+            if usuario_ad is None:
+                messages.error(request, f'Usuário "{username}" não encontrado no AD (ou conta desabilitada).')
+            elif User.objects.filter(username__iexact=usuario_ad['username']).exists():
+                messages.error(request, f'O usuário "{usuario_ad["username"]}" já existe no WMS.')
             else:
+                setor, papel = form.cleaned_data['grupo'], form.cleaned_data['subgrupo']
+                nome = usuario_ad['nome']
                 partes_nome = nome.split(' ', 1)
                 usuario = User.objects.create_user(
-                    username=username,
+                    username=usuario_ad['username'],
+                    email=usuario_ad['email'],
                     first_name=partes_nome[0],
                     last_name=partes_nome[1] if len(partes_nome) > 1 else '',
                 )
                 usuario.set_unusable_password()  # autenticação continua via LDAP
                 # Nasce inativo — Produção/Logística exigem ativação manual por um
-                # Administrador (tela "Ativar Usuários") antes de conseguir logar.
+                # Administrador (ação "Ativar" na tela Usuários) antes de conseguir logar.
                 usuario.is_active = False
                 usuario.save()
-                PerfilUsuario.objects.create(user=usuario, atribuido_manualmente=True)
-                grupo = Group.objects.get(name=nome_grupo)
-                usuario.groups.add(grupo)
+                _aplicar_grupo(usuario, setor, papel)
                 messages.success(
                     request,
-                    f'"{nome}" atribuído como {nome_grupo}. Usuário criado inativo — '
-                    f'ative-o em "Ativar Usuários" antes que ele possa acessar o sistema.',
+                    f'"{nome}" cadastrado como {nome_grupo_django(setor, papel)}. '
+                    f'Usuário criado inativo — ative-o na lista abaixo antes que ele possa acessar o sistema.',
                 )
-            return redirect(request.path)
-    else:
-        form = AtribuicaoUsuarioADForm()
+            return redirect('usuarios')
 
-    return render(request, 'core/atribuir_usuario_ad.html', {'form': form})
+        if acao == 'alterar_grupo':
+            form = AlterarGrupoUsuarioForm(request.POST)
+            usuario = _usuario_gerenciavel_por_pk(request.POST.get('usuario_id'))
+            if not form.is_valid() or usuario is None:
+                messages.error(request, 'Não foi possível alterar o grupo: dados inválidos.')
+                return redirect('usuarios')
+            setor, papel = form.cleaned_data['grupo'], form.cleaned_data['subgrupo']
+            _aplicar_grupo(usuario, setor, papel)
+            messages.success(
+                request,
+                f'"{usuario.get_full_name() or usuario.username}" agora é {nome_grupo_django(setor, papel)}. '
+                f'O menu e as telas dele já refletem o novo grupo no próximo acesso.',
+            )
+            return redirect('usuarios')
 
+        if acao == 'ativar':
+            usuario = _usuario_gerenciavel_por_pk(request.POST.get('usuario_id'))
+            if usuario is None or usuario.is_active:
+                messages.error(request, 'Usuário não encontrado ou já ativo.')
+            else:
+                usuario.is_active = True
+                usuario.save(update_fields=['is_active'])
+                messages.success(request, f'"{usuario.get_full_name() or usuario.username}" foi ativado e já pode acessar o WMS.')
+            return redirect('usuarios')
 
-@group_required('Administradores')
-def ativar_usuarios(request):
-    """Lista usuários dos grupos de Produção/Logística que nasceram inativos
-    (criados manualmente ou via primeiro login LDAP, ver GRUPOS_INATIVOS_POR_PADRAO
-    em ldap_signals.py) e permite a um Administrador ativá-los, liberando o
-    acesso ao WMS."""
-    User = get_user_model()
+        if acao == 'inativar':
+            usuario = _usuario_gerenciavel_por_pk(request.POST.get('usuario_id'))
+            if usuario is None or not usuario.is_active:
+                messages.error(request, 'Usuário não encontrado ou já inativo.')
+            else:
+                usuario.is_active = False
+                usuario.save(update_fields=['is_active'])
+                messages.success(request, f'"{usuario.get_full_name() or usuario.username}" foi inativado e não consegue mais acessar o WMS.')
+            return redirect('usuarios')
 
-    if request.method == 'POST':
-        usuario = User.objects.filter(pk=request.POST.get('usuario_id'), is_active=False).first()
-        if usuario:
-            usuario.is_active = True
-            usuario.save(update_fields=['is_active'])
-            messages.success(request, f'"{usuario.get_full_name() or usuario.username}" foi ativado e já pode acessar o WMS.')
-        return redirect('ativar_usuarios')
+        if acao == 'excluir':
+            usuario = _usuario_gerenciavel_por_pk(request.POST.get('usuario_id'))
+            if usuario is None:
+                messages.error(request, 'Usuário não encontrado.')
+            else:
+                nome = usuario.get_full_name() or usuario.username
+                usuario.delete()
+                messages.success(request, f'Usuário "{nome}" excluído.')
+            return redirect('usuarios')
 
-    usuarios_pendentes = (
-        User.objects.filter(is_active=False, groups__name__in=GRUPOS_INATIVOS_POR_PADRAO)
-        .distinct()
-        .prefetch_related('groups')
-        .order_by('first_name', 'last_name', 'username')
-    )
+        return redirect('usuarios')
 
-    return render(request, 'core/ativar_usuarios.html', {
-        'usuarios_pendentes': usuarios_pendentes,
+    linhas = []
+    for usuario in _usuarios_gerenciaveis():
+        setor, papel = _grupo_e_subgrupo(usuario)
+        linhas.append({'usuario': usuario, 'grupo': setor, 'subgrupo': papel})
+
+    return render(request, 'core/usuarios.html', {
+        'linhas': linhas,
+        'form_novo': NovoUsuarioForm(),
+        'form_alterar': AlterarGrupoUsuarioForm(),
     })
 
 
-def _parse_data(valor):
-    if not valor:
-        return None
-    try:
-        return date.fromisoformat(valor)
-    except ValueError:
-        return None
+TOP_N_SKUS_POR_DIA = 5
 
 
-def _montar_datasets_por_sku(dias_ordenados, skus_ordenados, contagem_por_dia_sku):
-    """Monta uma lista de datasets (um por SKU) no formato aceito pelo
-    Chart.js para grafico de barras empilhadas, a partir de uma contagem
-    indexada por (dia, sku)."""
+def _rotulos_e_datasets_por_sku(dias_ordenados, skus_ordenados, contagem_por_dia_sku):
+    """Monta (rotulos, datasets) no formato do gráfico de barras empilhadas:
+    um dataset {'sku', 'valores'} por SKU, alinhado aos dias."""
     rotulos = [d.isoformat() for d in dias_ordenados]
     datasets = []
     for sku in skus_ordenados:
@@ -128,36 +202,77 @@ def _montar_datasets_por_sku(dias_ordenados, skus_ordenados, contagem_por_dia_sk
     return rotulos, datasets
 
 
-def _serie_por_dia_e_sku(queryset_anotado_dia):
-    """Conta paletes por dia, quebrado por SKU: retorna (rotulos, datasets),
-    onde cada dataset e {'sku': ..., 'valores': [...]} alinhado aos rotulos."""
+def _serie_criados_por_dia_top_skus(queryset_anotado_dia):
+    """Paletes criados por dia, quebrado pelos TOP_N_SKUS_POR_DIA SKUs de maior
+    volume; os demais SKUs são somados em "Outros" — a pilha de cada dia
+    continua igual ao total do dia, sem estourar a paleta de cores."""
     linhas = list(
-        queryset_anotado_dia.values('dia', 'sku')
-        .annotate(quantidade=Count('id'))
-        .order_by('dia')
+        queryset_anotado_dia.values('dia', 'sku').annotate(quantidade=Count('id'))
     )
+    total_por_sku = Counter()
+    for item in linhas:
+        total_por_sku[item['sku']] += item['quantidade']
+    principais = [sku for sku, _ in total_por_sku.most_common(TOP_N_SKUS_POR_DIA)]
+
+    contagem = Counter()
+    tem_outros = False
+    for item in linhas:
+        sku = item['sku'] if item['sku'] in principais else 'Outros'
+        tem_outros = tem_outros or sku == 'Outros'
+        contagem[(item['dia'], sku)] += item['quantidade']
+
     dias_ordenados = sorted({item['dia'] for item in linhas})
-    skus_ordenados = sorted({item['sku'] for item in linhas})
-    contagem = {(item['dia'], item['sku']): item['quantidade'] for item in linhas}
-    return _montar_datasets_por_sku(dias_ordenados, skus_ordenados, contagem)
+    skus_ordenados = principais + (['Outros'] if tem_outros else [])
+    return _rotulos_e_datasets_por_sku(dias_ordenados, skus_ordenados, contagem)
 
 
-def _serie_lotes_por_dia_e_sku(historico_queryset):
-    """Conta lotes DISTINTOS aprovados por dia a partir de um queryset de
-    PaleteHistorico ja filtrado por estado+periodo, quebrado por SKU do
-    palete. Agrega em Python porque contar distinct(dia, lote) agrupado por
-    dia nao e trivial de forma portatil entre SQLite/MySQL. Um lote pode (em
-    tese) misturar SKUs diferentes, entao cada combinacao (dia, lote, sku) e
-    contada como parte da serie daquele SKU."""
-    pares = (
-        historico_queryset.annotate(dia=TruncDate('criado_em'))
-        .values('dia', 'palete__lote', 'palete__sku')
-        .distinct()
+def _paletes_por_dia(queryset):
+    """{dia: n} a partir de um queryset já agrupado por `dia` com `n` anotado."""
+    return {item['dia']: item['n'] for item in queryset}
+
+
+def _serie_fluxo_diario(pode_ver_producao, pode_ver_logistica):
+    """Paletes por dia em cada etapa do fluxo: criados, aprovados pela
+    Produção (CONFERIDO) e recebidos pela Logística (CONFERIDO_LOGISTICA).
+    A mesma unidade (paletes) nas três séries permite comparar o funil."""
+    criados = _paletes_por_dia(
+        Palete.objects.annotate(dia=TruncDate('criado_em')).values('dia').annotate(n=Count('id'))
     )
-    contagem = Counter((item['dia'], item['palete__sku']) for item in pares)
-    dias_ordenados = sorted({dia for dia, _sku in contagem.keys()})
-    skus_ordenados = sorted({sku for _dia, sku in contagem.keys()})
-    return _montar_datasets_por_sku(dias_ordenados, skus_ordenados, contagem)
+    producao = logistica = None
+    if pode_ver_producao:
+        producao = _paletes_por_dia(
+            PaleteHistorico.objects.filter(estado='CONFERIDO').annotate(dia=TruncDate('criado_em'))
+            .values('dia').annotate(n=Count('palete_id', distinct=True))
+        )
+    if pode_ver_logistica:
+        logistica = _paletes_por_dia(
+            PaleteHistorico.objects.filter(estado='CONFERIDO_LOGISTICA').annotate(dia=TruncDate('criado_em'))
+            .values('dia').annotate(n=Count('palete_id', distinct=True))
+        )
+
+    dias = set(criados)
+    for serie in (producao, logistica):
+        if serie:
+            dias |= set(serie)
+    dias_ordenados = sorted(dias)
+
+    def valores(serie):
+        return None if serie is None else [serie.get(dia, 0) for dia in dias_ordenados]
+
+    return {
+        'labels': [d.isoformat() for d in dias_ordenados],
+        'criados': valores(criados),
+        'producao': valores(producao),
+        'logistica': valores(logistica),
+    }
+
+
+def _totais_lotes_aprovados(estado):
+    """(lotes distintos aprovados, peso total em kg) dos paletes que chegaram ao `estado`."""
+    historico = PaleteHistorico.objects.filter(estado=estado)
+    lotes = historico.values('palete__lote').distinct().count()
+    peso = Palete.objects.filter(pk__in=historico.values('palete_id')).aggregate(total=Sum('peso_kg'))['total'] or 0
+    return lotes, peso
 
 
 @login_required
@@ -169,81 +284,26 @@ def estatisticas(request):
         name__in=['Administradores', 'Gestor Logística']
     ).exists()
 
-    criados_de = _parse_data(request.GET.get('criados_de'))
-    criados_ate = _parse_data(request.GET.get('criados_ate'))
-    criados_sku = request.GET.get('criados_sku', '')
-    producao_de = _parse_data(request.GET.get('producao_de'))
-    producao_ate = _parse_data(request.GET.get('producao_ate'))
-    producao_sku = request.GET.get('producao_sku', '')
-    logistica_de = _parse_data(request.GET.get('logistica_de'))
-    logistica_ate = _parse_data(request.GET.get('logistica_ate'))
-    logistica_sku = request.GET.get('logistica_sku', '')
-
-    produtos_disponiveis = list(
-        Palete.objects.values('sku', 'descricao').distinct().order_by('sku')
-    )
-
-    paletes_criados_qs = Palete.objects.all()
-    if criados_de:
-        paletes_criados_qs = paletes_criados_qs.filter(criado_em__date__gte=criados_de)
-    if criados_ate:
-        paletes_criados_qs = paletes_criados_qs.filter(criado_em__date__lte=criados_ate)
-    if criados_sku:
-        paletes_criados_qs = paletes_criados_qs.filter(sku=criados_sku)
-
-    total_paletes_criados = paletes_criados_qs.count()
-
-    criados_labels, criados_datasets = _serie_por_dia_e_sku(
-        paletes_criados_qs.annotate(dia=TruncDate('criado_em'))
+    paletes = Palete.objects.all()
+    total_paletes_criados = paletes.count()
+    criados_labels, criados_datasets = _serie_criados_por_dia_top_skus(
+        paletes.annotate(dia=TruncDate('criado_em'))
     )
 
     por_produto = list(
-        paletes_criados_qs.values('sku', 'descricao')
+        paletes.values('sku', 'descricao')
         .annotate(quantidade=Count('id'), peso_total=Sum('peso_kg'))
         .order_by('-quantidade')
     )
     top_produtos = por_produto[:TOP_N_PRODUTOS_GRAFICO]
-    produto_labels = [item['sku'] for item in top_produtos]
-    produto_quantidades = [item['quantidade'] for item in top_produtos]
-    produto_pesos = [float(item['peso_total']) for item in top_produtos]
 
-    total_lotes_producao = 0
-    peso_total_producao = 0
-    producao_labels, producao_datasets = [], []
+    total_lotes_producao = peso_total_producao = 0
     if pode_ver_producao:
-        hist_producao = PaleteHistorico.objects.filter(estado='CONFERIDO')
-        if producao_de:
-            hist_producao = hist_producao.filter(criado_em__date__gte=producao_de)
-        if producao_ate:
-            hist_producao = hist_producao.filter(criado_em__date__lte=producao_ate)
-        if producao_sku:
-            hist_producao = hist_producao.filter(palete__sku=producao_sku)
+        total_lotes_producao, peso_total_producao = _totais_lotes_aprovados('CONFERIDO')
 
-        total_lotes_producao = hist_producao.values('palete__lote').distinct().count()
-        peso_total_producao = Palete.objects.filter(
-            pk__in=hist_producao.values('palete_id')
-        ).aggregate(total=Sum('peso_kg'))['total'] or 0
-
-        producao_labels, producao_datasets = _serie_lotes_por_dia_e_sku(hist_producao)
-
-    total_lotes_logistica = 0
-    peso_total_logistica = 0
-    logistica_labels, logistica_datasets = [], []
+    total_lotes_logistica = peso_total_logistica = 0
     if pode_ver_logistica:
-        hist_logistica = PaleteHistorico.objects.filter(estado='CONFERIDO_LOGISTICA')
-        if logistica_de:
-            hist_logistica = hist_logistica.filter(criado_em__date__gte=logistica_de)
-        if logistica_ate:
-            hist_logistica = hist_logistica.filter(criado_em__date__lte=logistica_ate)
-        if logistica_sku:
-            hist_logistica = hist_logistica.filter(palete__sku=logistica_sku)
-
-        total_lotes_logistica = hist_logistica.values('palete__lote').distinct().count()
-        peso_total_logistica = Palete.objects.filter(
-            pk__in=hist_logistica.values('palete_id')
-        ).aggregate(total=Sum('peso_kg'))['total'] or 0
-
-        logistica_labels, logistica_datasets = _serie_lotes_por_dia_e_sku(hist_logistica)
+        total_lotes_logistica, peso_total_logistica = _totais_lotes_aprovados('CONFERIDO_LOGISTICA')
 
     template = 'core/estatisticas.html'
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -252,30 +312,19 @@ def estatisticas(request):
     return render(request, template, {
         'pode_ver_producao': pode_ver_producao,
         'pode_ver_logistica': pode_ver_logistica,
-        'criados_de': request.GET.get('criados_de', ''),
-        'criados_ate': request.GET.get('criados_ate', ''),
-        'criados_sku': criados_sku,
-        'produtos_disponiveis': produtos_disponiveis,
-        'producao_de': request.GET.get('producao_de', ''),
-        'producao_ate': request.GET.get('producao_ate', ''),
-        'producao_sku': producao_sku,
-        'logistica_de': request.GET.get('logistica_de', ''),
-        'logistica_ate': request.GET.get('logistica_ate', ''),
-        'logistica_sku': logistica_sku,
-
         'total_paletes_criados': total_paletes_criados,
         'por_produto': por_produto,
-
         'total_lotes_producao': total_lotes_producao,
         'peso_total_producao': peso_total_producao,
-
         'total_lotes_logistica': total_lotes_logistica,
         'peso_total_logistica': peso_total_logistica,
-
-        'grafico_criados': {'labels': criados_labels, 'datasets': criados_datasets},
-        'grafico_produto': {
-            'labels': produto_labels, 'quantidades': produto_quantidades, 'pesos': produto_pesos,
+        'dados': {
+            'fluxo': _serie_fluxo_diario(pode_ver_producao, pode_ver_logistica),
+            'criados': {'labels': criados_labels, 'datasets': criados_datasets},
+            'produto': {
+                'labels': [f"{item['sku']} — {item['descricao']}" for item in top_produtos],
+                'quantidades': [item['quantidade'] for item in top_produtos],
+                'pesos': [float(item['peso_total']) for item in top_produtos],
+            },
         },
-        'grafico_producao': {'labels': producao_labels, 'datasets': producao_datasets},
-        'grafico_logistica': {'labels': logistica_labels, 'datasets': logistica_datasets},
     })

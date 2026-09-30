@@ -14,7 +14,8 @@
 {% endif %}
 
 {% if not modo %}
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl">
+    <p class="hidden lg:block text-sm text-slate-500 mb-4">Escolha como deseja consultar o estoque.</p>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl lg:max-w-none">
         <a class="card-plain hover:border-primary-300 hover:shadow-sm transition text-center font-medium text-slate-800" href="?modo=palete">Consultar por Palete</a>
         <a class="card-plain hover:border-primary-300 hover:shadow-sm transition text-center font-medium text-slate-800" href="?modo=lote">Consultar por Lote</a>
         <a class="card-plain hover:border-primary-300 hover:shadow-sm transition text-center font-medium text-slate-800" href="?modo=endereco">Consultar por Endereço (Mapa de Estoque)</a>
@@ -44,7 +45,8 @@
 
         <p><a class="btn btn-secondary" href="?modo=palete">Nova bipagem</a></p>
     {% else %}
-        <form method="get" autocomplete="off" class="form-card max-w-lg mx-auto">
+        <p class="hidden lg:block text-sm text-slate-500 mb-4">Informe o código de barras do palete para ver os detalhes.</p>
+        <form method="get" autocomplete="off" class="form-card barra-form max-w-lg mx-auto lg:max-w-none lg:mx-0">
             <header class="form-card-header">
                 <h2 class="form-card-title">Consultar por Palete</h2>
                 <p class="form-card-subtitle">Informe o código de barras do palete.</p>
@@ -62,7 +64,8 @@
     {% endif %}
 
 {% elif modo == 'lote' %}
-    <form method="get" autocomplete="off" class="form-card max-w-lg mx-auto mb-6">
+    <p class="hidden lg:block text-sm text-slate-500 mb-4">Preencha ao menos um critério (lote ou data de fabricação) para listar os paletes.</p>
+    <form method="get" autocomplete="off" class="form-card barra-form max-w-lg mx-auto lg:max-w-none lg:mx-0 mb-6">
         <input type="hidden" name="modo" value="lote">
         <header class="form-card-header">
             <h2 class="form-card-title">Consultar por Lote</h2>
@@ -172,7 +175,8 @@
 
         <p><a class="btn btn-secondary" href="?modo=endereco">Nova consulta</a></p>
     {% else %}
-        <form method="get" autocomplete="off" class="form-card max-w-lg mx-auto mb-6">
+        <p class="hidden lg:block text-sm text-slate-500 mb-4">Filtre por andar e corredor, ou consulte o mapa inteiro.</p>
+        <form method="get" autocomplete="off" class="form-card barra-form max-w-lg mx-auto lg:max-w-none lg:mx-0 mb-6">
             <input type="hidden" name="modo" value="endereco">
             <header class="form-card-header">
                 <h2 class="form-card-title">Consultar por Endereço</h2>
