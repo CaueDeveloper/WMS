@@ -1,0 +1,10 @@
+{# Paginação. Uso: include com `pagina` (Page) e `prefixo` (URL terminada em "page=" ou similar). #}
+{% if pagina.paginator.num_pages > 1 %}
+<nav class="flex items-center gap-3" aria-label="Paginação">
+    {% if pagina.has_previous %}<a class="btn btn-secondary" href="{{ prefixo }}{{ pagina.previous_page_number }}">« Anterior</a>
+    {% else %}<button type="button" class="btn btn-secondary" disabled>« Anterior</button>{% endif %}
+    <span class="whitespace-nowrap text-sm text-slate-600">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+    {% if pagina.has_next %}<a class="btn btn-secondary" href="{{ prefixo }}{{ pagina.next_page_number }}">Próxima »</a>
+    {% else %}<button type="button" class="btn btn-secondary" disabled>Próxima »</button>{% endif %}
+</nav>
+{% endif %}

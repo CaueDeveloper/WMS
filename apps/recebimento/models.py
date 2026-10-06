@@ -2,6 +2,7 @@ import uuid
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 def gerar_barcode_palete():
@@ -10,7 +11,7 @@ def gerar_barcode_palete():
 
 class Palete(models.Model):
     STATUS_CHOICES = [
-        ('CRIADO', 'Etiqueta Impressa — Aguardando Bipagem de Transferência'),
+        ('CRIADO', 'Etiqueta Impressa'),
         ('EM_TRANSFERENCIA', 'Bipado para Transferência — Aguardando Aprovação de Lote'),
         ('CONFERIDO', 'Conferido e Aprovado pelo Gestor'),
         ('EM_CONFERENCIA_LOGISTICA', 'Bipado pela Logística — Aguardando Aprovação de Lote'),
@@ -18,6 +19,7 @@ class Palete(models.Model):
         ('ARMAZENADO', 'Armazenado no Endereço'),
         ('FINALIZADO', 'Movimentação Sincronizada no SAP'),
         ('RETIRADO', 'Retirado do Mapa — Saída Física do Estoque'),
+        ('REPROVADO', 'Reprovado pelo Operador — Aguardando Correção do Gestor'),
     ]
 
     barcode_palete = models.CharField(max_length=50, unique=True, default=gerar_barcode_palete)
@@ -25,6 +27,8 @@ class Palete(models.Model):
     descricao = models.CharField(max_length=200)
     lote = models.CharField(max_length=60)
     peso_kg = models.DecimalField(max_digits=12, decimal_places=3)
+    # Nulo apenas para paletes anteriores à introdução do campo.
+    data_fabricacao = models.DateField(null=True, blank=True)
     estado = models.CharField(max_length=25, choices=STATUS_CHOICES, default='CRIADO')
     area_destino = models.ForeignKey('estoque.AreaDestino', on_delete=models.SET_NULL, null=True, blank=True)
     endereco = models.ForeignKey('estoque.Endereco', on_delete=models.SET_NULL, null=True, blank=True)
@@ -34,6 +38,10 @@ class Palete(models.Model):
     aprovado_logistica_em = models.DateTimeField(null=True, blank=True)
     armazenado_em = models.DateTimeField(null=True, blank=True)
     retirado_em = models.DateTimeField(null=True, blank=True)
+    reprovado_em = models.DateTimeField(null=True, blank=True)
+    motivo_reprovacao = models.TextField(blank=True, default='')
+    # Etapa em que foi reprovado ('PRODUCAO' ou 'LOGISTICA'), só informativo.
+    reprovado_na_etapa = models.CharField(max_length=10, blank=True, default='')
 
     class Meta:
         indexes = [
@@ -42,6 +50,11 @@ class Palete(models.Model):
 
     def __str__(self):
         return f'Palete {self.barcode_palete} - Lote {self.lote}'
+
+    @property
+    def data_fabricacao_exibida(self):
+        """Data de fabricação; paletes antigos (sem o campo) caem na data de criação."""
+        return self.data_fabricacao or timezone.localtime(self.criado_em).date()
 
 
 class PaleteHistorico(models.Model):

@@ -1,0 +1,290 @@
+{% extends 'core/_shell_coletor.html' %}
+{% load core_extras %}
+{# Base das telas de transferência (Produção e Logística): bipagem, lista de lotes e relatório.
+   Cada tela só preenche os blocks de texto: title, titulo_pagina_coletor, intro,
+   form_titulo, form_subtitulo e form_botao. A lista é uma tabela no desktop e vira uma
+   lista de cartões no celular/coletor (.tabela-responsiva). #}
+
+{% block largura_coletor %}max-w-3xl lg:max-w-none{% endblock %}
+
+{% block shell_content_coletor %}
+<p class="mb-4 hidden text-sm text-slate-600 lg:block">{% block intro %}{% endblock %}</p>
+
+{% if pode_bipar %}
+<form method="post" autocomplete="off" class="form-card barra-form barra-form-compacta mb-4">
+    {% csrf_token %}
+    <header class="form-card-header">
+        <h2 class="form-card-title">{% block form_titulo %}{% endblock %}</h2>
+        <p class="form-card-subtitle">{% block form_subtitulo %}{% endblock %}</p>
+    </header>
+    <div class="form-card-body">
+        <div>
+            <label for="id_barcode_palete" class="text-base lg:text-sm">Barcode do palete</label>
+            <input type="text" name="barcode_palete" id="id_barcode_palete" class="input-field input-field-lg lg:!text-sm lg:!py-2 lg:!px-3" autofocus autocomplete="off" required>
+        </div>
+    </div>
+</form>
+{% endif %}
+
+{% if grupos %}
+<div class="mb-4 overflow-x-auto">
+    <table class="table-admin tabela-responsiva">
+        <caption class="sr-only">Paletes pendentes por lote</caption>
+        <thead>
+            <tr>
+                <th scope="col">Lote</th>
+                <th scope="col">Palete</th>
+                <th scope="col">Produto</th>
+                <th scope="col" class="num">Peso</th>
+                <th scope="col">Bipados</th>
+                <th scope="col">Ação</th>
+            </tr>
+        </thead>
+        {% for grupo in grupos %}
+        <tbody>
+            <tr class="bg-slate-50" data-lote-cabecalho>
+                <td colspan="6" data-label="">
+                    <div class="flex flex-wrap items-center justify-between gap-3 max-lg:w-full">
+                        <span class="flex items-center gap-2 text-sm text-slate-600">
+                            <button type="button" class="btn-seta" data-toggle-lote aria-expanded="true" aria-label="Mostrar ou esconder os paletes do lote {{ grupo.lote }}">{% include 'core/_icone.html' with nome='chevron' %}</button>
+                            <span>Lote <strong>{{ grupo.lote }}</strong> · {{ grupo.total_lote }} etiqueta{{ grupo.total_lote|pluralize }} · {{ grupo.peso_total|peso }} kg ·
+                            <span class="{% if grupo.reprovados %}badge-danger{% elif grupo.pendentes_bipagem %}badge-warning{% else %}badge-success{% endif %}">
+                                {{ grupo.quantidade }}/{{ grupo.total_lote }} bipados{% if grupo.reprovados %} · {{ grupo.reprovados }} reprovado{{ grupo.reprovados|pluralize }}{% endif %}
+                            </span></span>
+                        </span>
+                        {% if pode_aprovar %}
+                        <form method="post" class="max-lg:w-full" data-confirmar-lote data-lote="{{ grupo.lote }}" data-produto="{{ grupo.descricao }}" data-etiquetas="{{ grupo.total_lote }}" data-peso="{{ grupo.peso_total|peso }} kg">
+                            {% csrf_token %}
+                            <button type="submit" name="aprovar_lote" value="{{ grupo.lote }}" class="btn px-3 py-1.5 text-sm max-lg:min-h-12 max-lg:w-full max-lg:text-base"{% if grupo.pendentes_bipagem %} disabled title="{% if grupo.reprovados %}Corrija os paletes reprovados e bipe-os novamente{% else %}Aprove todos os paletes do lote primeiro{% endif %}"{% endif %}>Aprovar lote</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% for p in grupo.paletes %}
+            <tr data-linha-palete{% if p.estado == 'REPROVADO' %} class="bg-red-50"{% endif %}>
+                <td data-label="Lote"><div><strong>{{ grupo.lote }}</strong></div></td>
+                <td data-label="Palete"><div class="font-mono">{{ p.barcode_palete }}</div></td>
+                <td data-label="Produto"><div>{{ p.descricao }}</div></td>
+                <td data-label="Peso" class="num"><div>{{ p.peso_kg|peso }} kg</div></td>
+                <td data-label="Bipados">
+                    <div>
+                        {% if p.estado == 'REPROVADO' %}
+                        <span class="badge-danger" title="{{ p.motivo_reprovacao }}">Reprovado</span>
+                        {% elif p.estado == 'EM_TRANSFERENCIA' or p.estado == 'EM_CONFERENCIA_LOGISTICA' %}
+                        <span class="badge-success">Confirmado</span>
+                        {% else %}
+                        <span class="badge-warning">Pendente</span>
+                        {% endif %}
+                    </div>
+                </td>
+                <td data-label="Ação">
+                    <div class="max-lg:w-full">
+                        {% if p.estado == 'REPROVADO' %}
+                            {% if pode_aprovar and produtos %}
+                            <select class="select-acao" data-acao-palete data-barcode="{{ p.barcode_palete }}" aria-label="Ação do palete {{ p.barcode_palete }}"
+                                    data-editar-palete="{{ p.pk }}" data-sku="{{ p.sku }}" data-peso="{{ p.peso_kg|stringformat:'.3f' }}">
+                                <option value="">-----</option>
+                                <option value="editar">Editar</option>
+                            </select>
+                            {% endif %}
+                        {% elif pode_reprovar %}
+                        <select class="select-acao" data-acao-palete data-barcode="{{ p.barcode_palete }}" aria-label="Ação do palete {{ p.barcode_palete }}">
+                            <option value="">-----</option>
+                            {% if p.estado == 'CRIADO' or p.estado == 'CONFERIDO' %}<option value="aprovar">Aprovar</option>{% endif %}
+                            <option value="reprovar">Reprovar</option>
+                        </select>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        {% endfor %}
+    </table>
+</div>
+{% else %}
+<div class="mb-4">{% include 'core/_vazio.html' with texto='Nenhum lote pendente no momento. Os lotes aparecem aqui assim que o primeiro palete for bipado.' %}</div>
+{% endif %}
+
+{% if pode_aprovar %}
+<details class="mb-4">
+    <summary class="btn inline-flex cursor-pointer">Gerar relatório de aprovação</summary>
+    <div class="mt-3 flex max-w-lg flex-col gap-4">
+    <form method="get" class="form-card lg:max-w-lg">
+        <header class="form-card-header">
+            <h2 class="form-card-title">Relatório de aprovação</h2>
+            <p class="form-card-subtitle">Escolha a data de aprovação dos lotes.</p>
+        </header>
+        <div class="form-card-body">
+            <div>
+                <label for="id_data_relatorio">Data de aprovação</label>
+                <input type="date" name="data_relatorio" id="id_data_relatorio" class="input-field" value="{{ data_relatorio|date:'Y-m-d' }}">
+            </div>
+        </div>
+        <footer class="form-card-footer">
+            <button type="submit" class="btn">Buscar</button>
+        </footer>
+    </form>
+    <form method="post" class="form-card lg:max-w-lg">
+        {% csrf_token %}
+        <header class="form-card-header">
+            <h2 class="form-card-title">Lotes do relatório</h2>
+            <p class="form-card-subtitle">Aprovados em {{ data_relatorio|date:'d/m/Y' }}.</p>
+        </header>
+        <div class="form-card-body">
+            {% if lotes_data_relatorio %}
+            <fieldset class="m-0 border-0 p-0">
+                <legend class="mb-2 text-sm text-slate-600">Selecione os lotes que entram no relatório:</legend>
+                <ul class="list-none space-y-1 pl-0 text-sm">
+                    {% for lote in lotes_data_relatorio %}<li><label class="mb-0 inline-flex min-h-8 items-center gap-2 font-normal"><input type="checkbox" name="lote_relatorio" value="{{ lote }}"> {{ lote }}</label></li>{% endfor %}
+                </ul>
+            </fieldset>
+            {% else %}
+            <p class="text-sm text-slate-600">Nenhum lote aprovado em {{ data_relatorio|date:'d/m/Y' }}.</p>
+            {% endif %}
+        </div>
+        {% if lotes_data_relatorio %}
+        <footer class="form-card-footer">
+            <button type="submit" name="gerar_relatorio" value="1" class="btn">Gerar relatório</button>
+        </footer>
+        {% endif %}
+    </form>
+    </div>
+</details>
+{% endif %}
+
+{% include 'core/_paginacao.html' with pagina=grupos prefixo='?page=' %}
+
+{# Edição de item/peso de um palete reprovado (Gestor) #}
+{% if pode_aprovar and produtos %}
+<dialog id="dlg-editar-palete" class="dialog-modal">
+    <form method="post" class="form-card">
+        {% csrf_token %}
+        <header class="form-card-header">
+            <h2 class="form-card-title">Editar palete reprovado</h2>
+            <p class="form-card-subtitle" id="edit-barcode"></p>
+        </header>
+        <div class="form-card-body">
+            <div>
+                <label for="edit-produto">Item</label>
+                <select name="produto" id="edit-produto" class="input-field" required>
+                    {% for prod in produtos %}<option value="{{ prod.pk }}" data-sku="{{ prod.sku }}">{{ prod.sku }} — {{ prod.descricao }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="edit-peso">Peso (kg)</label>
+                <input type="number" name="peso_kg" id="edit-peso" step="0.001" min="0.001" class="input-field" required>
+            </div>
+        </div>
+        <footer class="form-card-footer max-lg:flex-col-reverse">
+            <button type="button" class="btn btn-secondary max-lg:w-full max-lg:min-h-12" id="edit-cancelar">Cancelar</button>
+            <button type="submit" name="corrigir_palete" value="" id="edit-salvar" class="btn max-lg:w-full max-lg:min-h-12">Salvar correção</button>
+        </footer>
+    </form>
+</dialog>
+{% endif %}
+
+{# Confirmação antes de aprovar um lote #}
+<dialog id="dlg-confirmar-lote" class="dialog-modal">
+    <div class="form-card">
+        <header class="form-card-header">
+            <h2 class="form-card-title">Confirmar aprovação</h2>
+            <p class="form-card-subtitle">Todos os dados do lote estão corretos?</p>
+        </header>
+        <div class="form-card-body">
+            <dl class="m-0 space-y-3 text-base lg:text-sm">
+                <div><dt class="text-slate-600">Lote</dt><dd class="m-0 font-semibold" id="confl-lote"></dd></div>
+                <div><dt class="text-slate-600">Produto</dt><dd class="m-0 font-semibold" id="confl-produto"></dd></div>
+                <div><dt class="text-slate-600">Etiquetas</dt><dd class="m-0 font-semibold" id="confl-etiquetas"></dd></div>
+                <div><dt class="text-slate-600">Peso total</dt><dd class="m-0 font-semibold" id="confl-peso"></dd></div>
+            </dl>
+        </div>
+        <footer class="form-card-footer max-lg:flex-col-reverse">
+            <button type="button" class="btn btn-secondary max-lg:w-full max-lg:min-h-12 max-lg:text-base" id="confl-voltar">Voltar</button>
+            <button type="button" class="btn max-lg:w-full max-lg:min-h-12 max-lg:text-base" id="confl-confirmar">Confirmar e aprovar</button>
+        </footer>
+    </div>
+</dialog>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var abrirEdicao = function () {};
+(function () {
+    document.querySelectorAll('[data-toggle-lote]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var aberto = btn.getAttribute('aria-expanded') === 'true';
+            btn.setAttribute('aria-expanded', aberto ? 'false' : 'true');
+            btn.closest('tbody').querySelectorAll('[data-linha-palete]').forEach(function (tr) { tr.hidden = aberto; });
+        });
+    });
+})();
+(function () {
+    // Lista suspensa "Ação": Aprovar / Reprovar enviam o POST; Editar abre a janela de correção.
+    var csrf = document.querySelector('input[name=csrfmiddlewaretoken]');
+    document.querySelectorAll('select[data-acao-palete]').forEach(function (sel) {
+        sel.addEventListener('change', function () {
+            var acao = sel.value, barcode = sel.dataset.barcode;
+            if (!acao) return;
+            if (acao === 'editar') { sel.value = ''; abrirEdicao(sel); return; }
+            if (acao === 'reprovar' && !confirm('Reprovar o palete ' + barcode + '?')) { sel.value = ''; return; }
+            var form = document.createElement('form');
+            form.method = 'post';
+            var campos = { csrfmiddlewaretoken: csrf ? csrf.value : '' };
+            campos[acao === 'aprovar' ? 'barcode_palete' : 'reprovar_palete'] = barcode;
+            Object.keys(campos).forEach(function (k) {
+                var h = document.createElement('input');
+                h.type = 'hidden'; h.name = k; h.value = campos[k];
+                form.appendChild(h);
+            });
+            document.body.appendChild(form);
+            sel.disabled = true;
+            form.submit();
+        });
+    });
+})();
+(function () {
+    var dlgE = document.getElementById('dlg-editar-palete');
+    if (!dlgE) return;
+    abrirEdicao = function (el) {
+        document.getElementById('edit-barcode').textContent = el.dataset.barcode;
+        document.getElementById('edit-salvar').value = el.dataset.editarPalete;
+        document.getElementById('edit-peso').value = el.dataset.peso;
+        var sel = document.getElementById('edit-produto');
+        Array.prototype.forEach.call(sel.options, function (o) { if (o.dataset.sku === el.dataset.sku) sel.value = o.value; });
+        dlgE.showModal();
+    };
+    document.getElementById('edit-cancelar').addEventListener('click', function () { dlgE.close(); });
+})();
+(function () {
+    var dlg = document.getElementById('dlg-confirmar-lote');
+    var pendente = null;  // {form, submitter}
+    document.querySelectorAll('form[data-confirmar-lote]').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            if (form.dataset.confirmado) return;
+            e.preventDefault();
+            pendente = { form: form, submitter: e.submitter };
+            document.getElementById('confl-lote').textContent = form.dataset.lote;
+            document.getElementById('confl-produto').textContent = form.dataset.produto;
+            document.getElementById('confl-etiquetas').textContent = form.dataset.etiquetas;
+            document.getElementById('confl-peso').textContent = form.dataset.peso;
+            dlg.showModal();
+        });
+    });
+    document.getElementById('confl-voltar').addEventListener('click', function () { dlg.close(); pendente = null; });
+    document.getElementById('confl-confirmar').addEventListener('click', function () {
+        if (!pendente) return;
+        this.disabled = true;  // evita aprovar em dobro com duplo clique
+        var form = pendente.form;
+        if (pendente.submitter && pendente.submitter.name) {
+            var h = document.createElement('input');
+            h.type = 'hidden'; h.name = pendente.submitter.name; h.value = pendente.submitter.value;
+            form.appendChild(h);
+        }
+        form.dataset.confirmado = '1';
+        form.submit();
+    });
+})();
+</script>
+{% endblock %}

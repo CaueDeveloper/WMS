@@ -4,7 +4,7 @@
         {% if item.numero == andar %}
             <span class="btn">Andar {{ item.numero }} <small class="font-normal opacity-80">{{ item.livres }} livres</small></span>
         {% else %}
-            <a class="btn btn-secondary" href="?{{ query_extra }}andar={{ item.numero }}">Andar {{ item.numero }} <small class="font-normal text-slate-500">{{ item.livres }} livres</small></a>
+            <a class="btn btn-secondary" href="?{{ query_extra }}andar={{ item.numero }}">Andar {{ item.numero }} <small class="font-normal text-slate-600">{{ item.livres }} livres</small></a>
         {% endif %}
     {% endfor %}
 </div>

@@ -1,5 +1,13 @@
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import Count, Q
+
+
+class EnderecoQuerySet(models.QuerySet):
+    def com_ocupacao(self):
+        """Anota `ocupacao` = paletes ARMAZENADO no endereço, contados direto
+        da tabela de paletes (não há contador guardado no endereço)."""
+        return self.annotate(ocupacao=Count('palete', filter=Q(palete__estado='ARMAZENADO')))
 
 
 class Endereco(models.Model):
@@ -16,8 +24,9 @@ class Endereco(models.Model):
     posicao = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(21)])
     codigo = models.CharField(max_length=14, unique=True)  # Ex: "001-02-A-01-01"
     capacidade = models.IntegerField(default=1)
-    ocupacao_atual = models.IntegerField(default=0)
     ativo = models.BooleanField(default=True)
+
+    objects = EnderecoQuerySet.as_manager()
 
     class Meta:
         constraints = [

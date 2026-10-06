@@ -1,0 +1,16 @@
+{% comment %}Avisos do Django (messages) — renderizados uma única vez pelo _shell.html. Mensagens com extra_tags='tela_cheia' viram o aviso verde em tela cheia; com 'tela_erro' junto, o aviso vermelho (reprovação).{% endcomment %}
+{% if messages %}
+<div class="mb-4 space-y-2">
+    {% for mensagem in messages %}
+        {% if 'tela_cheia' not in mensagem.extra_tags %}
+        <p role="{% if mensagem.level_tag == 'error' %}alert{% else %}status{% endif %}"
+           class="{% if mensagem.level_tag == 'error' %}alert-error{% elif mensagem.level_tag == 'warning' %}alert-warning{% else %}alert-success{% endif %} !mb-0 text-base lg:text-sm">{{ mensagem }}</p>
+        {% endif %}
+    {% endfor %}
+</div>
+{% for mensagem in messages %}
+    {% if 'tela_cheia' in mensagem.extra_tags %}
+    {% if 'tela_erro' in mensagem.extra_tags %}{% include 'core/_sucesso_tela.html' with texto=mensagem.message rapida=True erro=True %}{% elif 'tela_rapida' in mensagem.extra_tags %}{% include 'core/_sucesso_tela.html' with texto=mensagem.message rapida=True %}{% else %}{% include 'core/_sucesso_tela.html' with texto=mensagem.message %}{% endif %}
+    {% endif %}
+{% endfor %}
+{% endif %}

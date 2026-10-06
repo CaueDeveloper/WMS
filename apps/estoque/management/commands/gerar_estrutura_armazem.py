@@ -14,7 +14,7 @@ class Command(BaseCommand):
         novos = [
             Endereco(
                 codigo=Endereco.montar_codigo(corredor, andar, posicao),
-                corredor=corredor, andar=andar, posicao=posicao, capacidade=1, ocupacao_atual=0,
+                corredor=corredor, andar=andar, posicao=posicao, capacidade=1,
             )
             for corredor in Endereco.CORREDORES
             for andar in Endereco.ANDARES

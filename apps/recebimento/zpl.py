@@ -6,6 +6,8 @@ from pathlib import Path
 from django.conf import settings
 from django.utils import timezone
 
+from apps.core.templatetags.core_extras import formatar_peso
+
 logger = logging.getLogger(__name__)
 
 # Layout desenhado visualmente no ZebraDesigner e exportado como .zpl — os
@@ -20,13 +22,18 @@ def montar_zpl_etiqueta(palete):
     # LANGUAGE_CODE do projeto é 'en-us', mas todo o texto da aplicação é pt-BR.
     impresso_em = timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M')
     data_impressao, hora_impressao = impresso_em.split(' ')
+    # [[DATA]] é o campo "Data de Fabricação" da etiqueta; paletes antigos (sem
+    # data_fabricacao) caem na data de impressão.
+    data_fabricacao = (
+        palete.data_fabricacao.strftime('%d/%m/%Y') if palete.data_fabricacao else data_impressao
+    )
     template = CAMINHO_TEMPLATE_PALETE.read_text(encoding='utf-8')
     return (
         template
         .replace('[[BARCODE]]', palete.barcode_palete)
         .replace('[[LOTE]]', palete.lote)
-        .replace('[[PESO]]', f'{palete.peso_kg:.3f}')
-        .replace('[[DATA]]', data_impressao)
+        .replace('[[PESO]]', formatar_peso(palete.peso_kg))
+        .replace('[[DATA]]', data_fabricacao)
         .replace('[[HORA]]', hora_impressao)
     )
 

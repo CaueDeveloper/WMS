@@ -1,0 +1,47 @@
+{# Guardas: endereço completo de cada guarda, com paginação. #}
+{% if modo == 'simples' %}
+    <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        {% for e in pagina %}
+        <div class="flex items-center justify-between gap-3 rounded-lg border border-l-4 bg-white px-3 py-2 {% if e.estado == 'livre' %}border-slate-200 border-l-emerald-500{% elif e.estado == 'ocupado' %}border-slate-200 border-l-rose-600{% else %}border-slate-200 border-l-slate-400{% endif %}">
+            <div class="min-w-0">
+                <div class="font-mono text-sm font-bold text-slate-800">{{ e.codigo }}</div>
+                <div class="text-xs text-slate-600">Andar {{ e.andar }} · Corredor {{ e.corredor }} · Guarda {{ e.posicao|stringformat:"02d" }}</div>
+            </div>
+            <div class="shrink-0 text-right text-xs font-semibold {% if e.estado == 'livre' %}text-emerald-700{% elif e.estado == 'ocupado' %}text-rose-700{% else %}text-slate-600{% endif %}">
+                {% if e.estado == 'ocupado' %}Ocupada{% elif e.estado == 'livre' %}Livre{% else %}Inativa{% endif %}
+                {% if e.barcode %}<div class="font-mono font-normal text-slate-600">{{ e.barcode }}</div>{% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="overflow-x-auto">
+    <table class="w-full border-collapse text-sm">
+    <caption class="sr-only">Guardas e endereços completos</caption>
+        <thead>
+            <tr class="border-b border-slate-400 text-left">
+                <th scope="col" class="py-1 pr-4">Endereço</th><th scope="col" class="pr-4">Andar</th><th scope="col" class="pr-4">Corredor</th>
+                <th scope="col" class="pr-4">Guarda</th><th scope="col" class="pr-4">Situação</th><th scope="col">Palete</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for e in pagina %}
+            <tr class="border-b border-slate-200">
+                <td class="py-1 pr-4 font-mono">{{ e.codigo }}</td><td class="pr-4">{{ e.andar }}</td>
+                <td class="pr-4">{{ e.corredor }}</td><td class="pr-4">{{ e.posicao|stringformat:"02d" }}</td>
+                <td class="pr-4">{{ e.estado|capfirst }}</td><td class="font-mono">{{ e.barcode|default:"—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% endif %}
+
+<div class="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
+    <span>{{ pagina.start_index }}–{{ pagina.end_index }} de {{ pagina.paginator.count }} guardas</span>
+    <span class="flex items-center gap-2">
+        {% if url_anterior %}<a class="btn btn-secondary px-3 py-1.5" href="{{ url_anterior }}">« Anterior</a>{% endif %}
+        <span>Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+        {% if url_proximo %}<a class="btn btn-secondary px-3 py-1.5" href="{{ url_proximo }}">Próxima »</a>{% endif %}
+    </span>
+</div>

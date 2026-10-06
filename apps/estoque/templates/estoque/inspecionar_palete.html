@@ -2,45 +2,48 @@
 
 {% block title %}Inspecionar Palete — WMS{% endblock %}
 {% block titulo_pagina %}Inspecionar Palete{% endblock %}
-{% block nav_ativo_mapa %}nav-link-ativo{% endblock %}
-{% block voltar_link %}<a href="{% url 'estoque:mapa_estoque' %}" class="text-sm text-slate-500 hover:text-primary-700 shrink-0">« Mapa de Estoque</a>{% endblock %}
+{% block voltar_link %}
+<a href="{% url 'estoque:mapa_estoque' %}" class="inline-flex shrink-0 items-center gap-1 text-sm text-slate-600 no-underline hover:text-primary-700">
+    <span class="rotate-180">{% include 'core/_icone.html' with nome='chevron' classe='h-4 w-4' %}</span>Mapa de Estoque
+</a>
+{% endblock %}
 
 {% block shell_content %}
-<div class="card max-w-xl mb-6">
-    <p class="font-semibold text-slate-800 mb-1">{{ palete.barcode_palete }}</p>
-    <p class="text-sm text-slate-600 mb-1">SKU: {{ palete.sku }} — Lote: {{ palete.lote }}</p>
-    <p class="text-sm text-slate-600 mb-1">{{ palete.descricao }}</p>
-    <p class="text-sm text-slate-600 mb-1">Status atual: <strong class="text-slate-800">{{ palete.get_estado_display }}</strong></p>
-    <p class="text-sm text-slate-600 mb-1">Endereço atual: {{ palete.endereco.codigo|default:"—" }}</p>
-    {% if palete.aprovado_producao_em %}<p class="text-sm text-slate-600 mb-1">Aprovado na Produção: {{ palete.aprovado_producao_em|date:"d/m/Y H:i" }}</p>{% endif %}
-    {% if palete.aprovado_logistica_em %}<p class="text-sm text-slate-600 mb-1">Aprovado na Logística: {{ palete.aprovado_logistica_em|date:"d/m/Y H:i" }}</p>{% endif %}
-    {% if palete.armazenado_em %}<p class="text-sm text-slate-600 mb-1">Armazenado em: {{ palete.armazenado_em|date:"d/m/Y H:i" }}</p>{% endif %}
-    {% if palete.retirado_em %}<p class="text-sm text-slate-600">Retirado em: {{ palete.retirado_em|date:"d/m/Y H:i" }}</p>{% endif %}
-</div>
+<div class="mx-auto grid max-w-5xl gap-8 lg:grid-cols-5">
+    <section class="lg:col-span-2" aria-labelledby="titulo-palete">
+        <h2 id="titulo-palete" class="mb-3 font-mono text-lg">{{ palete.barcode_palete }}</h2>
+        <dl class="divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white text-sm">
+            <div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-600">Situação</dt><dd class="text-right font-semibold text-slate-900">{{ palete.get_estado_display }}</dd></div>
+            <div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-600">Endereço</dt><dd class="font-mono font-semibold text-slate-900">{{ palete.endereco.codigo|default:"—" }}</dd></div>
+            <div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-600">Produto</dt><dd class="text-right text-slate-900">{{ palete.descricao }}</dd></div>
+            <div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-600">SKU</dt><dd class="text-slate-900">{{ palete.sku }}</dd></div>
+            <div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-600">Lote</dt><dd class="text-slate-900">{{ palete.lote }}</dd></div>
+            {% if palete.aprovado_producao_em %}<div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-600">Aprovado na Produção</dt><dd class="text-slate-900">{{ palete.aprovado_producao_em|date:"d/m/Y H:i" }}</dd></div>{% endif %}
+            {% if palete.aprovado_logistica_em %}<div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-600">Aprovado na Logística</dt><dd class="text-slate-900">{{ palete.aprovado_logistica_em|date:"d/m/Y H:i" }}</dd></div>{% endif %}
+            {% if palete.armazenado_em %}<div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-600">Armazenado em</dt><dd class="text-slate-900">{{ palete.armazenado_em|date:"d/m/Y H:i" }}</dd></div>{% endif %}
+            {% if palete.retirado_em %}<div class="flex justify-between gap-4 px-4 py-2.5"><dt class="text-slate-600">Retirado em</dt><dd class="text-slate-900">{{ palete.retirado_em|date:"d/m/Y H:i" }}</dd></div>{% endif %}
+        </dl>
+    </section>
 
-<h2 class="mb-3">Fluxo — Da Criação até a Etapa Atual</h2>
-{% if not historico %}
-    <p class="text-sm text-slate-500">Nenhum evento registrado para este palete.</p>
-{% else %}
-<div class="overflow-x-auto">
-    <table class="table-admin">
-        <thead>
-            <tr>
-                <th>Etapa</th>
-                <th>Data/Hora</th>
-                <th>Usuário</th>
-            </tr>
-        </thead>
-        <tbody>
+    {# O histórico é uma sequência de verdade: da criação até a etapa atual. #}
+    <section class="lg:col-span-3" aria-labelledby="titulo-historico">
+        <h2 id="titulo-historico" class="mb-3 text-lg">Do início até agora</h2>
+        {% if not historico %}
+            {% include 'core/_vazio.html' with texto='Nenhum evento registrado para este palete.' %}
+        {% else %}
+        <ol class="relative ml-2 border-l-2 border-slate-200">
             {% for evento in historico %}
-            <tr>
-                <td>{{ evento.get_estado_display }}</td>
-                <td>{{ evento.criado_em|date:"d/m/Y H:i" }}</td>
-                <td>{{ evento.usuario.username|default:"—" }}</td>
-            </tr>
+            <li class="relative pb-5 pl-6 last:pb-0">
+                <span class="absolute -left-[7px] top-1 h-3 w-3 rounded-full border-2 border-white {% if forloop.last %}bg-primary-600 ring-2 ring-primary-200{% else %}bg-slate-400{% endif %}" aria-hidden="true"></span>
+                <div class="text-sm {% if forloop.last %}font-semibold text-slate-900{% else %}text-slate-800{% endif %}">{{ evento.get_estado_display }}</div>
+                <div class="text-xs text-slate-600">
+                    <time datetime="{{ evento.criado_em|date:'c' }}">{{ evento.criado_em|date:"d/m/Y H:i" }}</time>
+                    · {{ evento.usuario.username|default:"Sistema" }}
+                </div>
+            </li>
             {% endfor %}
-        </tbody>
-    </table>
+        </ol>
+        {% endif %}
+    </section>
 </div>
-{% endif %}
 {% endblock %}

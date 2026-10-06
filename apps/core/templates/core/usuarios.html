@@ -5,17 +5,13 @@
 {% block nav_ativo_usuarios %}nav-link-ativo{% endblock %}
 
 {% block shell_content %}
-{% for mensagem in messages %}
-    <p class="{% if mensagem.tags == 'error' %}alert-error{% else %}alert-success{% endif %}">{{ mensagem }}</p>
-{% endfor %}
-
 <div class="flex items-center justify-between gap-3 mb-4">
-    <p class="text-sm text-slate-500">Usuários do WMS e o grupo de acesso de cada um.</p>
-    <button type="button" class="btn shrink-0" data-abrir="dlg-novo">＋ Novo</button>
+    <p class="text-sm text-slate-600">Usuários do WMS e o grupo de acesso de cada um.</p>
+    <button type="button" class="btn shrink-0" data-abrir="dlg-novo">{% include 'core/_icone.html' with nome='plus' classe='h-4 w-4' %}Novo usuário</button>
 </div>
 
 {% if not linhas %}
-    <p class="text-sm text-slate-500">Nenhum usuário cadastrado. Clique em "Novo" para atribuir um usuário do AD a um grupo.</p>
+    {% include 'core/_vazio.html' with texto='Nenhum usuário cadastrado. Clique em "Novo" para atribuir um usuário do AD a um perfil de acesso.' %}
 {% else %}
     <div class="overflow-x-auto">
     <table class="table-admin">
@@ -25,7 +21,7 @@
                 <th>Email</th>
                 <th>Grupo</th>
                 <th>Subgrupo</th>
-                <th>Ações</th>
+                <th class="w-16"><span class="sr-only">Ações</span></th>
             </tr>
         </thead>
         <tbody>
@@ -40,12 +36,12 @@
                 <td>{{ linha.subgrupo }}</td>
                 <td>
                     <button type="button" data-menu-acoes aria-label="Ações" aria-haspopup="true"
-                            class="inline-flex h-8 w-8 items-center justify-center rounded text-lg font-bold leading-none text-slate-600 hover:bg-slate-100"
+                            class="inline-flex h-10 w-10 items-center justify-center rounded text-slate-600 transition-colors hover:bg-slate-100"
                             data-usuario-id="{{ linha.usuario.pk }}"
                             data-nome="{{ linha.usuario.get_full_name|default:linha.usuario.username }}"
                             data-grupo="{{ linha.grupo }}"
                             data-subgrupo="{{ linha.subgrupo }}"
-                            data-ativo="{% if linha.usuario.is_active %}1{% endif %}">⋮</button>
+                            data-ativo="{% if linha.usuario.is_active %}1{% endif %}">{% include 'core/_icone.html' with nome='dots' %}</button>
                 </td>
             </tr>
             {% endfor %}
@@ -67,7 +63,7 @@
 </div>
 
 {# Pop-up "Novo": busca o usuário no AD e o atribui a um grupo/subgrupo #}
-<dialog id="dlg-novo" class="fixed inset-0 m-auto h-fit max-h-[90vh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-lg p-0 shadow-xl backdrop:bg-slate-900/50">
+<dialog id="dlg-novo" class="dialog-modal">
     <form method="post" id="form-novo" class="form-card">
         {% csrf_token %}
         <input type="hidden" name="acao" value="novo">
@@ -83,7 +79,7 @@
                 <input type="text" id="busca-usuario" class="input-field py-2.5" autocomplete="off"
                        placeholder="Filtrar por nome ou login">
                 <ul id="busca-resultados" class="hidden mt-2 max-h-48 overflow-y-auto rounded border border-slate-300 bg-white text-sm divide-y divide-slate-100"></ul>
-                <p id="busca-status" class="mt-2 text-xs text-slate-500"></p>
+                <p id="busca-status" class="mt-2 text-xs text-slate-600"></p>
                 <p id="busca-selecionado" class="hidden mt-2 rounded border border-success-500 bg-success-50 px-3 py-2 text-sm font-medium text-success-600"></p>
             </div>
 
@@ -106,7 +102,7 @@
 </dialog>
 
 {# Pop-up "Alterar grupo" #}
-<dialog id="dlg-alterar" class="fixed inset-0 m-auto h-fit max-h-[90vh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-lg p-0 shadow-xl backdrop:bg-slate-900/50">
+<dialog id="dlg-alterar" class="dialog-modal">
     <form method="post" class="form-card">
         {% csrf_token %}
         <input type="hidden" name="acao" value="alterar_grupo">
@@ -139,7 +135,7 @@
 </dialog>
 
 {# Pop-up de confirmação de exclusão #}
-<dialog id="dlg-excluir" class="fixed inset-0 m-auto h-fit max-h-[90vh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-lg p-0 shadow-xl backdrop:bg-slate-900/50">
+<dialog id="dlg-excluir" class="dialog-modal">
     <form method="post" class="form-card">
         {% csrf_token %}
         <input type="hidden" name="acao" value="excluir">

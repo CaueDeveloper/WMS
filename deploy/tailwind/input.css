@@ -30,7 +30,7 @@
   --color-danger-600: #8c3024;
 
   --radius-DEFAULT: 6px;
-  --font-sans: Arial, Helvetica, sans-serif;
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 /*
@@ -47,7 +47,8 @@
 
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-800 font-sans antialiased;
+    @apply bg-slate-50 text-slate-800 font-sans antialiased tabular-nums;
+    touch-action: manipulation;
   }
   h1 {
     @apply text-xl font-semibold text-slate-900;
@@ -61,12 +62,35 @@
   label {
     @apply block text-sm font-medium text-slate-700 mb-1.5;
   }
+
+  /* Acessibilidade e interação (ui-ux-pro-max): foco visível só para teclado,
+     cursor de mão em tudo que é clicável e respeito a prefers-reduced-motion. */
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-primary-500);
+    outline-offset: 2px;
+  }
+  :where(a[href], button:not(:disabled), select, summary, label[for]) {
+    cursor: pointer;
+  }
+  /* Impressão (ex.: relatório de aprovação): só o conteúdo da página. */
+  @media print {
+    aside, header, .no-imprimir { display: none !important; }
+    body { background: #fff; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 @layer components {
   /* Navegação da sidebar */
   .nav-link {
-    @apply flex items-center gap-3 px-5 py-2.5 text-white/85 border-l-4 border-transparent
+    @apply flex min-h-11 items-center gap-3 px-5 py-2 text-white/85 border-l-4 border-transparent
            transition-colors duration-150 hover:bg-white/10 hover:text-white;
   }
   .nav-link-ativo {
@@ -94,6 +118,27 @@
   .btn-danger {
     @apply bg-white text-danger-600 border border-danger-500 hover:bg-danger-50;
   }
+  /* Seta que esconde/mostra os paletes de um lote */
+  .btn-seta {
+    @apply inline-flex h-8 w-8 shrink-0 items-center justify-center rounded bg-transparent text-slate-600
+           hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500 max-lg:h-11 max-lg:w-11;
+  }
+  .btn-seta svg {
+    transition: transform .15s;
+  }
+  .btn-seta[aria-expanded="true"] svg {
+    transform: rotate(90deg);
+  }
+  [data-linha-palete][hidden] {
+    display: none !important;
+  }
+
+  /* Lista suspensa "Ação" das tabelas (Aprovar / Reprovar / Editar) */
+  .select-acao {
+    @apply block w-36 rounded border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800
+           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500
+           max-lg:min-h-12 max-lg:w-full max-lg:text-base;
+  }
 
   /* Campos de formulário */
   .input-field {
@@ -116,6 +161,9 @@
      corpo com campos empilhados e rodapé com a ação principal. */
   .form-card {
     @apply bg-white border border-slate-200 rounded-lg shadow-md overflow-hidden;
+  }
+  .form-card-header-logo {
+    @apply py-6 text-center;
   }
   .form-card-header {
     @apply bg-primary-600 px-6 py-4;
@@ -153,12 +201,24 @@
   .barra-form .form-card-footer {
     @apply lg:border-0 lg:bg-transparent lg:p-0;
   }
+  /* Variante que se ajusta ao conteúdo em vez de ocupar a largura toda */
+  .barra-form-compacta {
+    @apply lg:w-fit lg:py-3;
+  }
+  .barra-form-compacta .form-card-body {
+    @apply lg:flex-none;
+  }
 
   /* <dialog> com formulário: pop-up centralizado em tela grande; no celular fica sempre
      aberto, inline na página (como era antes do pop-up existir). */
   .dialog-form {
     @apply fixed inset-0 m-auto h-fit max-h-[90vh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-lg p-0 shadow-xl backdrop:bg-slate-900/50
            max-lg:static max-lg:block max-lg:m-0 max-lg:w-full max-lg:max-w-none max-lg:overflow-visible max-lg:bg-transparent max-lg:shadow-none;
+  }
+
+  /* <dialog> modal centralizado com .form-card dentro (tela Usuários). */
+  .dialog-modal {
+    @apply fixed inset-0 m-auto h-fit max-h-[90vh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-lg p-0 shadow-xl backdrop:bg-slate-900/50;
   }
 
   /* Selos / badges de status */
@@ -179,19 +239,68 @@
   .alert-error {
     @apply rounded border px-3 py-2.5 text-sm font-medium mb-4 bg-danger-50 text-danger-600 border-danger-500;
   }
+  .alert-warning {
+    @apply rounded border px-3 py-2.5 text-sm font-medium mb-4 bg-warning-50 text-warning-600 border-warning-500;
+  }
   .alert-success {
     @apply rounded border px-3 py-2.5 text-sm font-medium mb-4 bg-success-50 text-success-600 border-success-500;
   }
 
-  /* Tabelas administrativas */
+  /* Tabelas administrativas: cabeçalho claro, só divisórias horizontais. O contêiner
+     com rolagem horizontal ganha a borda externa arredondada. */
   .table-admin {
     @apply w-full border-collapse bg-white text-sm;
   }
   .table-admin th, .table-admin td {
-    @apply border border-slate-200 px-3 py-2 text-left;
+    @apply border-0 border-b border-slate-200 px-3 py-2.5 text-left align-middle;
   }
   .table-admin th {
-    @apply bg-primary-600 text-white font-semibold sticky top-0 z-10;
+    @apply bg-slate-100 text-slate-700 font-semibold whitespace-nowrap border-slate-300 sticky top-0 z-10;
+  }
+  .table-admin tbody tr:last-child td {
+    @apply border-b-0;
+  }
+  .table-admin tbody tr:hover td {
+    @apply bg-slate-50;
+  }
+  .table-admin .num {
+    @apply text-right;
+  }
+  .overflow-x-auto:has(> .table-admin) {
+    @apply rounded-lg border border-slate-200 bg-white;
+  }
+
+  /* Tabela que no celular/coletor vira uma lista de cartões (um por linha). Cada <td>
+     precisa de data-label e de um único <div> com o conteúdo. Abaixo de 1024px. */
+  @media (max-width: 1023px) {
+    .tabela-responsiva, .tabela-responsiva tbody, .tabela-responsiva tr, .tabela-responsiva td {
+      display: block;
+    }
+    .tabela-responsiva thead {
+      @apply sr-only;
+    }
+    .tabela-responsiva tr {
+      @apply mb-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm;
+    }
+    .tabela-responsiva td {
+      @apply flex items-start justify-between gap-4 border-0 px-0 py-1.5 text-base;
+    }
+    .tabela-responsiva td::before {
+      content: attr(data-label);
+      @apply shrink-0 font-semibold text-slate-600;
+    }
+    .tabela-responsiva td[data-label=""]::before {
+      display: none;
+    }
+    .tabela-responsiva td > div {
+      @apply min-w-0 text-right;
+    }
+    .tabela-responsiva td > div details {
+      @apply text-left;
+    }
+    .overflow-x-auto:has(> .tabela-responsiva) {
+      @apply rounded-none border-0 bg-transparent;
+    }
   }
 
   /* Contadores de bipagem */
@@ -221,4 +330,11 @@
   .nivel-cheio {
     @apply bg-rose-200;
   }
+
+  /* Cor de texto/traço por faixa de ocupação (modo simples do Mapa de Estoque) */
+  .cor-nivel-vazio { @apply text-slate-400; }
+  .cor-nivel-baixo { @apply text-emerald-700; }
+  .cor-nivel-medio { @apply text-amber-600; }
+  .cor-nivel-alto { @apply text-orange-600; }
+  .cor-nivel-cheio { @apply text-rose-600; }
 }

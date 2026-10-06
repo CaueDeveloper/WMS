@@ -8,6 +8,8 @@ from django.db.models import Count, Sum
 from django.db.models.functions import TruncDate
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
+from django.utils import timezone
 
 from apps.recebimento.models import Palete, PaleteHistorico
 
@@ -18,13 +20,47 @@ from .ldap_lookup import (
     obter_usuario_ad,
 )
 from .models import PerfilUsuario
+from .navegacao import itens_permitidos
 
 TOP_N_PRODUTOS_GRAFICO = 15
 
 
+# Etapas do palete na tela inicial, na ordem do fluxo real. `tela` é a view que
+# resolve aquela etapa; o link só aparece se o usuário tiver acesso a ela.
+ETAPAS_FLUXO = (
+    ('Etiquetados', ('CRIADO',), 'aguardando bipagem', 'recebimento:transferencia_gestor'),
+    ('Em transferência', ('EM_TRANSFERENCIA',), 'aguardando aprovação do gestor', 'recebimento:transferencia_gestor'),
+    ('Na Logística', ('CONFERIDO', 'EM_CONFERENCIA_LOGISTICA'), 'aguardando conferência', 'recebimento:transferencia_logistica'),
+    ('A armazenar', ('CONFERIDO_LOGISTICA',), 'aguardando endereço', 'estoque:putaway'),
+    ('Armazenados', ('ARMAZENADO',), 'guardados no mapa', 'estoque:mapa_estoque'),
+)
+MOVIMENTACOES_RECENTES = 8
+DIAS_SEMANA = ('segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado', 'domingo')
+MESES = ('janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro')
+
+
 @login_required
 def home(request):
-    return render(request, 'core/home.html')
+    permitidos = itens_permitidos(request.user)
+    telas_liberadas = {item.view_name for item in permitidos}
+    por_estado = dict(Palete.objects.values_list('estado').annotate(n=Count('id')))
+
+    etapas = []
+    for rotulo, estados, situacao, tela in ETAPAS_FLUXO:
+        etapas.append({
+            'rotulo': rotulo,
+            'situacao': situacao,
+            'quantidade': sum(por_estado.get(estado, 0) for estado in estados),
+            'url': reverse(tela) if tela in telas_liberadas else None,
+        })
+
+    hoje = timezone.localdate()
+    return render(request, 'core/home.html', {
+        'hoje': f'{DIAS_SEMANA[hoje.weekday()].capitalize()}, {hoje.day} de {MESES[hoje.month - 1]}',
+        'etapas': etapas,
+        'atalhos': [item for item in permitidos if item.view_name != 'home' and item.descricao],
+        'recentes': PaleteHistorico.objects.select_related('palete', 'usuario').order_by('-criado_em')[:MOVIMENTACOES_RECENTES],
+    })
 
 
 @group_required('Administradores')

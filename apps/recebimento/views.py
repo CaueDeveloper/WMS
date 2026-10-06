@@ -9,10 +9,14 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.core.decorators import group_required
+from apps.estoque.models import Produto
 
-from .forms import RecebimentoForm
+from .forms import CorrecaoPaleteForm, RecebimentoForm
 from .models import Palete, PaleteHistorico, registrar_historico
-from .services import LoteIncompletoError, LoteVazioError, aprovar_lote, aprovar_lote_logistica
+from .services import (
+    LoteIncompletoError, LoteVazioError, PaleteStateError, aprovar_lote, aprovar_lote_logistica,
+    corrigir_palete, reprovar_palete,
+)
 from .zpl import disparar_impressao_async
 
 PESO_FIXO_RECEBIMENTO_KG = Decimal('500')
@@ -28,10 +32,14 @@ def receber_palete(request):
             produto = form.cleaned_data['produto']
             lote = form.cleaned_data['lote']
             quantidade = form.cleaned_data['quantidade']
+            data_fabricacao = form.cleaned_data['data_fabricacao']
             peso_kg = form.cleaned_data['peso_kg'] if form.cleaned_data['peso_variavel'] else PESO_FIXO_RECEBIMENTO_KG
 
             paletes = [
-                Palete(sku=produto.sku, descricao=produto.descricao, lote=lote, peso_kg=peso_kg)
+                Palete(
+                    sku=produto.sku, descricao=produto.descricao, lote=lote,
+                    peso_kg=peso_kg, data_fabricacao=data_fabricacao,
+                )
                 for _ in range(quantidade)
             ]
             Palete.objects.bulk_create(paletes)  # estado permanece CRIADO
@@ -42,12 +50,14 @@ def receber_palete(request):
                     request,
                     f'Palete {paletes[0].barcode_palete} (lote {lote}) impresso — '
                     'aguarde a bipagem de transferência pelo Gestor.',
+                    extra_tags='tela_cheia',
                 )
             else:
                 messages.success(
                     request,
                     f'{quantidade} paletes do lote {lote} impressos — '
                     'aguarde a bipagem de transferência pelo Gestor.',
+                    extra_tags='tela_cheia',
                 )
             return redirect('recebimento:novo')
     else:
@@ -55,6 +65,10 @@ def receber_palete(request):
 
     return render(request, 'recebimento/receber_palete.html', {
         'form': form,
+        'peso_fixo_kg': PESO_FIXO_RECEBIMENTO_KG,
+        'produtos_peso_variavel': list(
+            Produto.objects.filter(ativo=True, peso_variavel=True).values_list('pk', flat=True)
+        ),
         'paletes_recentes': Palete.objects.order_by('-criado_em', '-pk')[:PALETES_RECENTES_NA_TELA],
     })
 
@@ -80,7 +94,7 @@ def _bipar_para_transferencia(request, barcode):
     palete.estado = 'EM_TRANSFERENCIA'
     palete.save(update_fields=['estado', 'atualizado_em'])
     registrar_historico([palete], 'EM_TRANSFERENCIA', usuario=request.user)
-    messages.success(request, f'Palete {palete.barcode_palete} (lote {palete.lote}) bipado para transferência.')
+    messages.success(request, f'Palete {palete.barcode_palete} (lote {palete.lote}) bipado para transferência.', extra_tags='tela_cheia tela_rapida')
     return palete
 
 
@@ -105,7 +119,7 @@ def _bipar_para_confirmacao_logistica(request, barcode):
     palete.estado = 'EM_CONFERENCIA_LOGISTICA'
     palete.save(update_fields=['estado', 'atualizado_em'])
     registrar_historico([palete], 'EM_CONFERENCIA_LOGISTICA', usuario=request.user)
-    messages.success(request, f'Palete {palete.barcode_palete} (lote {palete.lote}) bipado para conferência da logística.')
+    messages.success(request, f'Palete {palete.barcode_palete} (lote {palete.lote}) bipado para conferência da logística.', extra_tags='tela_cheia tela_rapida')
     return palete
 
 
@@ -132,12 +146,51 @@ def _marcar_bipagem(grupos, estado_bipado):
     for grupo in grupos:
         bipados = [p for p in grupo['paletes'] if p.estado == estado_bipado]
         grupo['quantidade'] = len(bipados)
+        grupo['reprovados'] = sum(1 for p in grupo['paletes'] if p.estado == 'REPROVADO')
         grupo['pendentes_bipagem'] = len(grupo['paletes']) - len(bipados)
         grupo['total_lote'] = len(grupo['paletes'])
 
 
 def _usuario_em_grupo(user, *nomes_grupo):
     return user.is_superuser or user.groups.filter(name__in=nomes_grupo).exists()
+
+
+def _reprovar(request, etapa):
+    try:
+        palete = reprovar_palete(
+            request.POST.get('reprovar_palete'), etapa,
+            usuario=request.user, motivo=request.POST.get('motivo'),
+        )
+    except PaleteStateError as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.warning(
+            request,
+            f'Palete {palete.barcode_palete} (lote {palete.lote}) reprovado — enviado ao Gestor para correção.',
+            extra_tags='tela_cheia tela_rapida tela_erro',
+        )
+
+
+def _corrigir(request):
+    form = CorrecaoPaleteForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, 'Dados inválidos: ' + '; '.join(
+            e for erros in form.errors.values() for e in erros
+        ))
+        return
+    try:
+        palete = corrigir_palete(
+            request.POST.get('corrigir_palete'),
+            form.cleaned_data['produto'], form.cleaned_data['peso_kg'],
+            form.cleaned_data['data_fabricacao'], usuario=request.user,
+        )
+    except PaleteStateError as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(
+            request,
+            f'Palete {palete.barcode_palete} corrigido — bipe-o novamente para confirmar.',
+        )
 
 
 def _parse_data_relatorio(valor):
@@ -169,8 +222,12 @@ def transferencia_gestor(request):
     pode_aprovar = _usuario_em_grupo(request.user, 'Administradores', 'Gestor Produção')
 
     if request.method == 'POST':
-        if 'barcode_palete' in request.POST and pode_bipar:
+        if 'barcode_palete' in request.POST and (pode_bipar or pode_aprovar):
             _bipar_para_transferencia(request, request.POST.get('barcode_palete'))
+        elif 'reprovar_palete' in request.POST and (pode_bipar or pode_aprovar):
+            _reprovar(request, 'PRODUCAO')
+        elif 'corrigir_palete' in request.POST and pode_aprovar:
+            _corrigir(request)
         elif 'aprovar_lote' in request.POST and pode_aprovar:
             lote = request.POST.get('aprovar_lote')
             try:
@@ -181,6 +238,7 @@ def transferencia_gestor(request):
                 messages.success(
                     request,
                     f'Lote {lote} aprovado ({len(paletes)} palete(s)).',
+                    extra_tags='tela_cheia',
                 )
         elif 'gerar_relatorio' in request.POST and pode_aprovar:
             lotes_selecionados = request.POST.getlist('lote_relatorio')
@@ -192,13 +250,17 @@ def transferencia_gestor(request):
                 return redirect(url_relatorio)
         return redirect('recebimento:transferencia_gestor')
 
-    pendentes = Palete.objects.filter(estado__in=['CRIADO', 'EM_TRANSFERENCIA']).order_by('lote', 'criado_em')
+    pendentes = Palete.objects.filter(
+        estado__in=['CRIADO', 'EM_TRANSFERENCIA', 'REPROVADO'],
+    ).order_by('lote', 'criado_em')
     grupos = _agrupar_por_lote(pendentes)
     _marcar_bipagem(grupos, estado_bipado='EM_TRANSFERENCIA')
     grupos_pagina = Paginator(grupos, GRUPOS_POR_PAGINA_TRANSFERENCIA).get_page(request.GET.get('page'))
     data_relatorio = _parse_data_relatorio(request.GET.get('data_relatorio'))
     return render(request, 'recebimento/transferencia_gestor.html', {
         'grupos': grupos_pagina,
+        'produtos': Produto.objects.filter(ativo=True).order_by('sku') if pode_aprovar else [],
+        'pode_reprovar': pode_bipar or pode_aprovar,
         'pode_bipar': pode_bipar,
         'pode_aprovar': pode_aprovar,
         'data_relatorio': data_relatorio,
@@ -214,6 +276,8 @@ def transferencia_logistica(request):
     if request.method == 'POST':
         if 'barcode_palete' in request.POST and pode_bipar:
             _bipar_para_confirmacao_logistica(request, request.POST.get('barcode_palete'))
+        elif 'reprovar_palete' in request.POST and pode_bipar:
+            _reprovar(request, 'LOGISTICA')
         elif 'aprovar_lote' in request.POST and pode_aprovar:
             lote = request.POST.get('aprovar_lote')
             try:
@@ -225,6 +289,7 @@ def transferencia_logistica(request):
                     request,
                     f'Lote {lote} confirmado pela logística ({len(paletes)} palete(s)). '
                     'Liberado(s) para o Mapa de Estoque e put-away.',
+                    extra_tags='tela_cheia',
                 )
         elif 'gerar_relatorio' in request.POST and pode_aprovar:
             lotes_selecionados = request.POST.getlist('lote_relatorio')
@@ -245,6 +310,7 @@ def transferencia_logistica(request):
     data_relatorio = _parse_data_relatorio(request.GET.get('data_relatorio'))
     return render(request, 'recebimento/transferencia_logistica.html', {
         'grupos': grupos_pagina,
+        'pode_reprovar': pode_bipar,
         'pode_bipar': pode_bipar,
         'pode_aprovar': pode_aprovar,
         'data_relatorio': data_relatorio,

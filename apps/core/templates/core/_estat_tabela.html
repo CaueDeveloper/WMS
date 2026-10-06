@@ -1,16 +1,17 @@
+{% load core_extras %}
 <div id="estat-tabela" class="overflow-x-auto">
     <table class="table-admin">
-        <thead><tr><th>SKU</th><th>Descrição</th><th>Quantidade</th><th>Peso Total (kg)</th></tr></thead>
+        <thead><tr><th>SKU</th><th>Descrição</th><th class="num">Quantidade</th><th class="num">Peso total (kg)</th></tr></thead>
         <tbody>
             {% for item in por_produto %}
             <tr>
                 <td>{{ item.sku }}</td>
                 <td>{{ item.descricao }}</td>
-                <td>{{ item.quantidade }}</td>
-                <td>{{ item.peso_total|floatformat:3 }}</td>
+                <td class="num">{{ item.quantidade }}</td>
+                <td class="num">{{ item.peso_total|peso }}</td>
             </tr>
             {% empty %}
-            <tr><td colspan="4" class="text-center text-slate-500">Nenhum palete criado.</td></tr>
+            <tr><td colspan="4" class="text-center text-slate-600">Nenhum palete criado no período.</td></tr>
             {% endfor %}
         </tbody>
     </table>

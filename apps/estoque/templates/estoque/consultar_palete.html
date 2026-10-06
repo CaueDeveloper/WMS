@@ -1,37 +1,47 @@
 {% extends 'core/_shell.html' %}
+{% load core_extras %}
 
 {% block title %}Consultar — WMS{% endblock %}
-{% block titulo_pagina %}Consultar{% endblock %}
-{% block nav_ativo_consultar %}nav-link-ativo{% endblock %}
+{% block titulo_pagina %}Consultar Palete{% endblock %}
+{% block nav_ativo_consultar %}{% if not modo %}nav-link-ativo{% endif %}{% endblock %}
 
 {% block shell_content %}
-{% for mensagem in messages %}
-    <p class="{% if mensagem.tags == 'error' %}alert-error{% else %}alert-success{% endif %}">{{ mensagem }}</p>
-{% endfor %}
-
-{% if modo %}
-    <p class="mb-4"><a class="btn btn-secondary" href="{% url 'estoque:consultar_palete' %}">« Escolher outro tipo de consulta</a></p>
-{% endif %}
-
 {% if not modo %}
-    <p class="hidden lg:block text-sm text-slate-500 mb-4">Escolha como deseja consultar o estoque.</p>
+    <p class="hidden lg:block text-sm text-slate-600 mb-4">Escolha como deseja consultar o estoque.</p>
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl lg:max-w-none">
-        <a class="card-plain hover:border-primary-300 hover:shadow-sm transition text-center font-medium text-slate-800" href="?modo=palete">Consultar por Palete</a>
-        <a class="card-plain hover:border-primary-300 hover:shadow-sm transition text-center font-medium text-slate-800" href="?modo=lote">Consultar por Lote</a>
-        <a class="card-plain hover:border-primary-300 hover:shadow-sm transition text-center font-medium text-slate-800" href="?modo=endereco">Consultar por Endereço (Mapa de Estoque)</a>
+        <a class="card-plain hover:border-primary-300 hover:shadow-sm transition text-center font-medium text-slate-800" href="?modo=palete">Palete</a>
+        <a class="card-plain hover:border-primary-300 hover:shadow-sm transition text-center font-medium text-slate-800" href="?modo=lote">Lote</a>
+        <a class="card-plain hover:border-primary-300 hover:shadow-sm transition text-center font-medium text-slate-800" href="?modo=endereco">Endereço</a>
     </div>
 
 {% elif modo == 'palete' %}
     {% if palete %}
-        <h2 class="mb-4">Consultar por Palete</h2>
+        <h2 class="mb-4">Palete</h2>
         <div class="card max-w-lg mb-4">
             <p class="font-semibold text-slate-800 mb-1">{{ palete.barcode_palete }}</p>
             <p class="text-sm text-slate-600 mb-1">SKU: {{ palete.sku }} — Lote: {{ palete.lote }}</p>
             <p class="text-sm text-slate-600 mb-1">{{ palete.descricao }}</p>
-            <p class="text-sm text-slate-600 mb-1">Peso: {{ palete.peso_kg }} kg</p>
+            <p class="text-sm text-slate-600 mb-1">Peso: {{ palete.peso_kg|peso }} kg</p>
             <p class="text-sm text-slate-600 mb-1">Status: <strong class="text-slate-800">{{ palete.get_estado_display }}</strong></p>
-            <p class="text-sm text-slate-600 mb-1">Data de fabricação: <strong class="text-slate-800">{{ palete.criado_em|date:"d/m/Y" }}</strong></p>
+            <p class="text-sm text-slate-600 mb-1">Data de fabricação: <strong class="text-slate-800">{{ palete.data_fabricacao_exibida|date:"d/m/Y" }}</strong></p>
             <p class="text-sm text-slate-600">Endereço atual: <strong class="text-slate-800">{{ palete.endereco.codigo|default:"—" }}</strong></p>
+        </div>
+
+        <div class="card max-w-lg mb-4">
+            <h3 class="font-semibold text-slate-800 mb-2">Histórico</h3>
+            <ul class="text-sm text-slate-600 space-y-2">
+                {% for etapa in linha_do_tempo %}
+                <li>
+                    {{ etapa.rotulo }}:
+                    {% if etapa.evento %}
+                        <strong class="text-slate-800">{% firstof etapa.evento.usuario.get_full_name etapa.evento.usuario.username "—" %}</strong>
+                        — {{ etapa.evento.criado_em|date:"d/m/Y" }} às {{ etapa.evento.criado_em|time:"H:i:s" }}
+                    {% else %}
+                        <span class="text-slate-400">ainda não ocorreu</span>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
         </div>
 
         {% if palete.estado == 'ARMAZENADO' %}
@@ -45,12 +55,9 @@
 
         <p><a class="btn btn-secondary" href="?modo=palete">Nova bipagem</a></p>
     {% else %}
-        <p class="hidden lg:block text-sm text-slate-500 mb-4">Informe o código de barras do palete para ver os detalhes.</p>
+        <p class="hidden lg:block text-sm text-slate-600 mb-4">Informe o código de barras do palete para ver os detalhes.</p>
         <form method="get" autocomplete="off" class="form-card barra-form max-w-lg mx-auto lg:max-w-none lg:mx-0">
-            <header class="form-card-header">
-                <h2 class="form-card-title">Consultar por Palete</h2>
-                <p class="form-card-subtitle">Informe o código de barras do palete.</p>
-            </header>
+            <input type="hidden" name="modo" value="palete">
             <div class="form-card-body">
                 <div>
                     <label for="id_barcode">Bipe ou digite o código de barras do palete</label>
@@ -64,13 +71,9 @@
     {% endif %}
 
 {% elif modo == 'lote' %}
-    <p class="hidden lg:block text-sm text-slate-500 mb-4">Preencha ao menos um critério (lote ou data de fabricação) para listar os paletes.</p>
+    <p class="hidden lg:block text-sm text-slate-600 mb-4">Preencha ao menos um critério (lote ou data de fabricação) para listar os paletes.</p>
     <form method="get" autocomplete="off" class="form-card barra-form max-w-lg mx-auto lg:max-w-none lg:mx-0 mb-6">
         <input type="hidden" name="modo" value="lote">
-        <header class="form-card-header">
-            <h2 class="form-card-title">Consultar por Lote</h2>
-            <p class="form-card-subtitle">Preencha ao menos um critério de busca.</p>
-        </header>
         <div class="form-card-body">
             <div>
                 <label for="id_lote">Lote</label>
@@ -106,34 +109,24 @@
                     <td>{{ p.sku }}</td>
                     <td>{{ p.lote }}</td>
                     <td>{{ p.get_estado_display }}</td>
-                    <td>{{ p.criado_em|date:"d/m/Y" }}</td>
+                    <td>{{ p.data_fabricacao_exibida|date:"d/m/Y" }}</td>
                     <td>{{ p.endereco.codigo|default:"—" }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-    <div class="flex items-center gap-3">
-        {% if resultados.has_previous %}
-            <a class="btn btn-secondary" href="?modo=lote&lote={{ lote|urlencode }}&sku={{ sku|urlencode }}&data_fabricacao={{ data_fabricacao|urlencode }}&pg={{ resultados.previous_page_number }}">« Anterior</a>
-        {% else %}
-            <span class="btn opacity-50 cursor-not-allowed bg-slate-300">« Anterior</span>
-        {% endif %}
-        <span class="text-sm text-slate-500 whitespace-nowrap">Página {{ resultados.number }} de {{ resultados.paginator.num_pages }}</span>
-        {% if resultados.has_next %}
-            <a class="btn btn-secondary" href="?modo=lote&lote={{ lote|urlencode }}&sku={{ sku|urlencode }}&data_fabricacao={{ data_fabricacao|urlencode }}&pg={{ resultados.next_page_number }}">Próxima »</a>
-        {% else %}
-            <span class="btn opacity-50 cursor-not-allowed bg-slate-300">Próxima »</span>
-        {% endif %}
-    </div>
     {% endif %}
+    {% with lote_url=lote|urlencode sku_url=sku|urlencode data_url=data_fabricacao|urlencode %}
+        {% include 'core/_paginacao.html' with pagina=resultados prefixo='?modo=lote&lote='|add:lote_url|add:'&sku='|add:sku_url|add:'&data_fabricacao='|add:data_url|add:'&pg=' %}
+    {% endwith %}
 
 {% elif modo == 'endereco' %}
     {% if endereco %}
         <div class="card max-w-lg mb-4">
             <p class="font-semibold text-slate-800 mb-1">{{ endereco.codigo }}</p>
             <p class="text-sm text-slate-600">Corredor {{ endereco.corredor }} — Andar {{ endereco.andar }} — Posição {{ endereco.posicao|stringformat:"02d" }}</p>
-            <p class="text-sm text-slate-600">{% if endereco.ocupacao_atual %}Ocupado{% else %}Livre{% endif %}</p>
+            <p class="text-sm text-slate-600">{% if paletes %}Ocupado{% else %}Livre{% endif %}</p>
         </div>
 
         {% if paletes %}
@@ -154,7 +147,7 @@
                         <td><a class="text-primary-700 hover:underline" href="?modo=palete&barcode={{ p.barcode_palete|urlencode }}">{{ p.barcode_palete }}</a></td>
                         <td>{{ p.sku }}</td>
                         <td>{{ p.lote }}</td>
-                        <td>{{ p.criado_em|date:"d/m/Y" }}</td>
+                        <td>{{ p.data_fabricacao_exibida|date:"d/m/Y" }}</td>
                         <td>
                             <form method="post" autocomplete="off">
                                 {% csrf_token %}
@@ -170,86 +163,26 @@
             </table>
         </div>
         {% else %}
-            <p class="text-sm text-slate-500">Nenhum palete armazenado neste endereço no momento.</p>
+            {% include 'core/_vazio.html' with texto='Nenhum palete armazenado neste endereço no momento.' %}
         {% endif %}
 
         <p><a class="btn btn-secondary" href="?modo=endereco">Nova consulta</a></p>
     {% else %}
-        <p class="hidden lg:block text-sm text-slate-500 mb-4">Filtre por andar e corredor, ou consulte o mapa inteiro.</p>
+        <p class="hidden lg:block text-sm text-slate-600 mb-4">Selecione o andar para consultar o mapa.</p>
         <form method="get" autocomplete="off" class="form-card barra-form max-w-lg mx-auto lg:max-w-none lg:mx-0 mb-6">
             <input type="hidden" name="modo" value="endereco">
-            <header class="form-card-header">
-                <h2 class="form-card-title">Consultar por Endereço</h2>
-                <p class="form-card-subtitle">Filtre por andar, corredor ou consulte o mapa inteiro.</p>
-            </header>
             <div class="form-card-body">
             <div>
                 <label for="id_andar">Andar</label>
-                <select name="andar" id="id_andar" class="input-field">
+                <select name="andar" id="id_andar" class="input-field" onchange="this.form.submit()">
                     <option value="">Todos</option>
                     {% for a in andares %}
                         <option value="{{ a }}" {% if andar == a|stringformat:"s" %}selected{% endif %}>Andar {{ a }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <div>
-                <label for="id_corredor">Corredor</label>
-                <select name="corredor" id="id_corredor" class="input-field">
-                    <option value="">Todos</option>
-                    {% for c in corredores %}
-                        <option value="{{ c }}" {% if corredor == c %}selected{% endif %}>{{ c }}</option>
-                    {% endfor %}
-                </select>
             </div>
-            </div>
-            <footer class="form-card-footer">
-                <button type="submit" class="btn">Buscar</button>
-            </footer>
         </form>
-
-        {% if filtro_submetido %}
-            {% if resultados_mapa %}
-            <div class="overflow-x-auto mb-4">
-                <table class="table-admin">
-                    <thead>
-                        <tr>
-                            <th>Barcode</th>
-                            <th>SKU</th>
-                            <th>Lote</th>
-                            <th>Data de Fabricação</th>
-                            <th>Endereço</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for p in resultados_mapa %}
-                        <tr>
-                            <td><a class="text-primary-700 hover:underline" href="?modo=palete&barcode={{ p.barcode_palete|urlencode }}">{{ p.barcode_palete }}</a></td>
-                            <td>{{ p.sku }}</td>
-                            <td>{{ p.lote }}</td>
-                            <td>{{ p.criado_em|date:"d/m/Y" }}</td>
-                            <td>{{ p.endereco.codigo|default:"—" }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            <div class="flex items-center gap-3 mb-6">
-                {% if resultados_mapa.has_previous %}
-                    <a class="btn btn-secondary" href="?modo=endereco&andar={{ andar|urlencode }}&corredor={{ corredor|urlencode }}&pg={{ resultados_mapa.previous_page_number }}">« Anterior</a>
-                {% else %}
-                    <span class="btn opacity-50 cursor-not-allowed bg-slate-300">« Anterior</span>
-                {% endif %}
-                <span class="text-sm text-slate-500 whitespace-nowrap">Página {{ resultados_mapa.number }} de {{ resultados_mapa.paginator.num_pages }}</span>
-                {% if resultados_mapa.has_next %}
-                    <a class="btn btn-secondary" href="?modo=endereco&andar={{ andar|urlencode }}&corredor={{ corredor|urlencode }}&pg={{ resultados_mapa.next_page_number }}">Próxima »</a>
-                {% else %}
-                    <span class="btn opacity-50 cursor-not-allowed bg-slate-300">Próxima »</span>
-                {% endif %}
-            </div>
-            {% else %}
-                <p class="text-sm text-slate-500 mb-6">Nenhum palete armazenado para este filtro no momento.</p>
-            {% endif %}
-        {% endif %}
 
         {% include 'estoque/_legenda_grade.html' %}
         {% include 'estoque/_grade_enderecos.html' with titulo=grade_titulo grade=grade link_endereco=request.path %}

@@ -1,97 +1,67 @@
 {% extends 'base.html' %}
-{% load core_extras %}
-{# Shell administrativo: sidebar de módulos (visíveis conforme grupo do usuário) + topbar.
-   Páginas de dashboard/consulta em desktop devem extender este template (não base.html
-   diretamente) e preencher os blocks titulo_pagina e shell_content.
-   Páginas de coletor extendem _shell_coletor.html em vez deste.
-   No mobile a sidebar vira um menu gaveta (off-canvas), controlado sem JS via
-   checkbox oculto (#menu-toggle) + label/for, para não depender de script extra. #}
+{# Shell administrativo: sidebar de módulos (montada em apps/core/navegacao.py conforme o
+   grupo do usuário) + topbar. Páginas de dashboard/consulta extendem este template (não
+   base.html diretamente) e preenchem os blocks titulo_pagina e shell_content. Páginas de
+   coletor extendem _shell_coletor.html. No mobile a sidebar vira uma gaveta controlada sem
+   JS por um checkbox oculto (#menu-toggle) + label/for. #}
 
 {% block content %}
 <div class="lg:flex min-h-screen">
     <input type="checkbox" id="menu-toggle" class="peer hidden">
 
-    <label for="menu-toggle" class="hidden peer-checked:block lg:!hidden fixed inset-0 z-30 bg-slate-900/50"></label>
+    <label for="menu-toggle" class="hidden peer-checked:block lg:!hidden fixed inset-0 z-30 bg-slate-900/50" aria-hidden="true"></label>
 
-    <aside class="fixed inset-y-0 left-0 z-40 w-64 -translate-x-full peer-checked:translate-x-0 transition-transform duration-200 ease-in-out
-                   lg:sticky lg:top-0 lg:h-screen lg:z-auto lg:w-60 lg:shrink-0 lg:translate-x-0
-                   flex flex-col bg-primary-700 text-white">
-        <div class="flex items-center justify-between px-5 py-5 border-b border-white/10">
-            <span class="text-sm font-semibold tracking-wide uppercase">WMS · Café do Sítio</span>
-            <label for="menu-toggle" class="lg:hidden text-white/70 hover:text-white cursor-pointer text-xl leading-none">✕</label>
+    <aside class="fixed inset-y-0 left-0 z-40 flex w-64 -translate-x-full flex-col bg-primary-700 text-white transition-transform duration-200 ease-in-out peer-checked:translate-x-0
+                   lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:w-60 lg:shrink-0 lg:translate-x-0">
+        <div class="flex items-center justify-between border-b border-white/10 px-5 py-4">
+            <a href="{% url 'home' %}" class="no-underline">
+                <span class="block text-base font-bold leading-tight text-white">WMS</span>
+                <span class="block text-xs text-white/70">Café do Sítio</span>
+            </a>
+            <label for="menu-toggle" class="flex h-10 w-10 items-center justify-center rounded text-white/80 hover:bg-white/10 hover:text-white lg:hidden" aria-label="Fechar menu">
+                {% include 'core/_icone.html' with nome='close' %}
+            </label>
         </div>
-        <nav class="flex-1 py-3 space-y-0.5 text-sm overflow-y-auto">
-            <a href="{% url 'home' %}" class="nav-link {% block nav_ativo_home %}{% endblock %}">
-                <span class="nav-icon">⌂</span> Início
-            </a>
 
-            {% if user|em_algum_grupo:"Administradores,Operador Produção" %}
-            <a href="{% url 'recebimento:novo' %}" class="nav-link {% block nav_ativo_recebimento %}{% endblock %}">
-                <span class="nav-icon">▣</span> Produção
-            </a>
-            {% endif %}
-
-            {% if user|em_algum_grupo:"Administradores,Operador Produção,Gestor Produção" %}
-            <a href="{% url 'recebimento:transferencia_gestor' %}" class="nav-link {% block nav_ativo_transferencia_producao %}{% endblock %}">
-                <span class="nav-icon">⇄</span> Transferência: Produção
-            </a>
-            {% endif %}
-
-            {% if user|em_algum_grupo:"Administradores,Operador Logística,Gestor Logística" %}
-            <a href="{% url 'recebimento:transferencia_logistica' %}" class="nav-link {% block nav_ativo_transferencia_logistica %}{% endblock %}">
-                <span class="nav-icon">⇄</span> Transferência: Logística
-            </a>
-            {% endif %}
-
-            {% if user|em_algum_grupo:"Administradores,Operador Logística" %}
-            <a href="{% url 'estoque:putaway' %}" class="nav-link {% block nav_ativo_putaway %}{% endblock %}">
-                <span class="nav-icon">▤</span> Armazenagem
-            </a>
-            <a href="{% url 'estoque:plano_armazenagem' %}" class="nav-link {% block nav_ativo_plano %}{% endblock %}">
-                <span class="nav-icon">➜</span> Plano de Armazenagem
-            </a>
-            {% endif %}
-
-            {% if user|em_algum_grupo:"Administradores,Gestor Produção,Gestor Logística" %}
-            <a href="{% url 'estoque:mapa_estoque' %}" class="nav-link {% block nav_ativo_mapa %}{% endblock %}">
-                <span class="nav-icon">▦</span> Mapa de Estoque
-            </a>
-            {% endif %}
-
-            {% if user|em_algum_grupo:"Administradores,Operador Produção,Operador Logística,Gestor Produção,Gestor Logística" %}
-            <a href="{% url 'estoque:consultar_palete' %}" class="nav-link {% block nav_ativo_consultar %}{% endblock %}">
-                <span class="nav-icon">⌕</span> Consultar
-            </a>
-            {% endif %}
-
-            {% if user|em_algum_grupo:"Administradores,Gestor Produção,Gestor Logística" %}
-            <a href="{% url 'estatisticas' %}" class="nav-link {% block nav_ativo_estatisticas %}{% endblock %}">
-                <span class="nav-icon">▲</span> Estatísticas
-            </a>
-            {% endif %}
-
-            {% if user|em_algum_grupo:"Administradores" %}
-            <a href="{% url 'usuarios' %}" class="nav-link {% block nav_ativo_usuarios %}{% endblock %}">
-                <span class="nav-icon">☺</span> Usuários
-            </a>
-            {% endif %}
+        <nav class="flex-1 overflow-y-auto py-3 text-sm" aria-label="Menu principal">
+            {% for secao in menu_secoes %}
+                {% if secao.titulo %}<p class="mb-1 mt-5 px-5 text-xs font-semibold text-white/60">{{ secao.titulo }}</p>{% endif %}
+                {% for item in secao.itens %}
+                    <a href="{{ item.url }}" class="nav-link{% if item.ativo %} nav-link-ativo{% endif %}"{% if item.ativo %} aria-current="page"{% endif %}>
+                        {% include 'core/_icone.html' with nome=item.icone %}{{ item.rotulo }}
+                    </a>
+                {% endfor %}
+            {% endfor %}
         </nav>
+
         <form method="post" action="{% url 'logout' %}" class="border-t border-white/10 p-3">
             {% csrf_token %}
-            <button type="submit" class="w-full text-left px-2 py-2 text-sm text-white/85 hover:text-white hover:bg-white/10 rounded transition-colors">Sair</button>
+            <button type="submit" class="flex min-h-11 w-full items-center gap-3 rounded px-2 text-sm text-white/85 transition-colors hover:bg-white/10 hover:text-white">
+                {% include 'core/_icone.html' with nome='logout' %}Sair
+            </button>
         </form>
     </aside>
 
-    <div class="flex-1 min-w-0 flex flex-col">
-        <header class="sticky top-0 z-20 flex items-center gap-3 bg-white border-b border-slate-200 px-4 py-3 lg:px-6">
-            <label for="menu-toggle" class="lg:hidden cursor-pointer text-slate-600 hover:text-primary-700 text-xl leading-none shrink-0" aria-label="Abrir menu">☰</label>
-            <div class="flex items-center gap-3 min-w-0 flex-1">
+    <div class="flex min-w-0 flex-1 flex-col">
+        <header class="sticky top-0 z-20 flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-2.5 lg:px-6">
+            <label for="menu-toggle" class="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded text-slate-700 hover:bg-slate-100 lg:hidden" aria-label="Abrir menu">
+                {% include 'core/_icone.html' with nome='menu' classe='h-6 w-6' %}
+            </label>
+            <div class="flex min-w-0 flex-1 items-center gap-3">
                 {% block voltar_link %}{% endblock %}
-                <h1 class="text-base font-semibold text-slate-900 truncate m-0">{% block titulo_pagina %}{% endblock %}</h1>
+                <h1 class="m-0 truncate text-lg font-semibold text-slate-900">{% block titulo_pagina %}{% endblock %}</h1>
+            </div>
+            <div class="flex shrink-0 items-center gap-2.5">
+                <div class="hidden text-right leading-tight sm:block">
+                    <div class="text-sm font-medium text-slate-800">{{ usuario_nome }}</div>
+                    <div class="max-w-48 truncate text-xs text-slate-600">{{ usuario_perfil }}</div>
+                </div>
+                <span class="flex h-9 w-9 items-center justify-center rounded-full bg-primary-100 text-sm font-semibold text-primary-700" aria-hidden="true">{{ usuario_iniciais }}</span>
             </div>
         </header>
 
         <main class="flex-1 p-4 lg:p-6">
+            {% include 'core/_mensagens.html' %}
             {% block shell_content %}{% endblock %}
         </main>
     </div>

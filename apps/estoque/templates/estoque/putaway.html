@@ -1,4 +1,5 @@
 {% extends 'core/_shell_coletor.html' %}
+{% load core_extras %}
 
 {% block title %}Armazenagem — WMS{% endblock %}
 {% block titulo_pagina_coletor %}Armazenagem{% endblock %}
@@ -6,15 +7,11 @@
 {% block largura_coletor %}max-w-3xl lg:max-w-none{% endblock %}
 
 {% block shell_content_coletor %}
-{% for mensagem in messages %}
-    <p class="{% if mensagem.tags == 'error' %}alert-error{% else %}alert-success{% endif %} text-lg lg:text-sm">{{ mensagem }}</p>
-{% endfor %}
-
 {% if lote %}
     <div class="card mb-4">
         <p class="text-lg lg:text-base font-semibold text-slate-800 mb-1">Lote {{ lote }} — {{ paletes.0.sku }}</p>
         <p class="text-base lg:text-sm text-slate-600 mb-1">{{ paletes.0.descricao }}</p>
-        <p class="text-base lg:text-sm text-slate-600 mb-2">{{ quantidade }} palete(s) — {{ peso_total }} kg</p>
+        <p class="text-base lg:text-sm text-slate-600 mb-2">{{ quantidade }} palete(s) — {{ peso_total|peso }} kg</p>
         <details>
             <summary class="cursor-pointer font-semibold text-sm">Ver barcodes</summary>
             <ul class="list-none mt-2 pl-0 text-sm">
@@ -49,22 +46,14 @@
         {% include 'estoque/_grade_enderecos.html' with titulo=grade_titulo clicavel=True %}
     </form>
 {% else %}
-    <p class="hidden lg:block text-sm text-slate-500 mb-4">Bipe um palete para localizar o lote a ser armazenado; abaixo, os paletes pendentes de armazenagem.</p>
     <form method="post" autocomplete="off" class="form-card barra-form">
         {% csrf_token %}
-        <header class="form-card-header">
-            <h2 class="form-card-title">Armazenagem</h2>
-            <p class="form-card-subtitle">Bipe um palete para localizar o lote a ser armazenado.</p>
-        </header>
         <div class="form-card-body">
             <div id="linha-lote">
                 <label for="id_barcode_palete" class="text-base lg:text-sm">Barcode</label>
                 <input type="text" name="barcode_palete" id="id_barcode_palete" class="input-field input-field-lg lg:!text-sm lg:!py-2 lg:!px-3" autofocus autocomplete="off" required>
             </div>
         </div>
-        <footer class="form-card-footer">
-            <button type="submit" class="btn btn-block btn-lg lg:!w-auto lg:!text-sm lg:!py-2 lg:!px-4">Buscar</button>
-        </footer>
     </form>
 
     {% if paletes_pendentes %}
@@ -76,7 +65,7 @@
                     <th>Lote</th>
                     <th>SKU</th>
                     <th>Descrição</th>
-                    <th>Peso (kg)</th>
+                    <th class="num">Peso (kg)</th>
                 </tr>
             </thead>
             <tbody>
@@ -86,7 +75,7 @@
                     <td>{{ palete.lote }}</td>
                     <td>{{ palete.sku }}</td>
                     <td>{{ palete.descricao }}</td>
-                    <td>{{ palete.peso_kg }}</td>
+                    <td class="num">{{ palete.peso_kg|peso }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

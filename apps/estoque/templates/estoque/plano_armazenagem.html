@@ -1,34 +1,23 @@
 {% extends 'core/_shell.html' %}
+{% load core_extras %}
 
 {% block title %}Plano de Armazenagem — WMS{% endblock %}
 {% block titulo_pagina %}Plano de Armazenagem{% endblock %}
 {% block nav_ativo_plano %}nav-link-ativo{% endblock %}
 
 {% block shell_content %}
-{% for mensagem in messages %}
-    <p class="{% if mensagem.tags == 'error' %}alert-error{% else %}alert-success{% endif %}">{{ mensagem }}</p>
-{% endfor %}
-
-<p class="hidden lg:block text-sm text-slate-500 mb-4">Bipe o palete para ver o trajeto até o endereço de armazenagem.</p>
 <form method="get" autocomplete="off" class="form-card barra-form max-w-lg lg:max-w-none mb-6">
-    <header class="form-card-header">
-        <h2 class="form-card-title">Localizar Palete</h2>
-        <p class="form-card-subtitle">Bipe o palete para ver o trajeto até o endereço de armazenagem.</p>
-    </header>
     <div class="form-card-body">
         <div>
             <label for="id_barcode_palete">Barcode</label>
             <input type="text" name="barcode_palete" id="id_barcode_palete" class="input-field" value="{{ barcode_palete }}" autofocus autocomplete="off" required>
         </div>
     </div>
-    <footer class="form-card-footer">
-        <button type="submit" class="btn">Buscar</button>
-    </footer>
 </form>
 
 {% if grupo %}
     {% include 'estoque/_legenda_grade.html' %}
-    <div class="flex flex-wrap gap-4 text-xs text-slate-500 mb-4">
+    <div class="flex flex-wrap gap-4 text-xs text-slate-600 mb-4">
         <span class="inline-flex items-center gap-1.5"><span class="w-4 h-4 rounded border-2 border-primary-600 bg-primary-100 inline-block"></span> ● Início do trajeto</span>
         <span class="inline-flex items-center gap-1.5"><span class="w-4 h-4 rounded border-2 border-primary-600 bg-primary-50 inline-block"></span> → Caminho até o destino</span>
         <span class="inline-flex items-center gap-1.5"><span class="w-4 h-4 rounded border-2 border-danger-500 bg-danger-50 inline-block"></span> ★ Endereço de destino</span>
@@ -37,7 +26,7 @@
     <div class="card mb-4">
         <p class="font-semibold text-slate-800 mb-1">{{ grupo.paletes.0.barcode_palete }}</p>
         <p class="text-sm text-slate-600 mb-1">SKU: {{ grupo.paletes.0.sku }} — Lote: {{ grupo.paletes.0.lote }}</p>
-        <p class="text-sm text-slate-600 mb-1">{{ grupo.paletes.0.descricao }} — {{ grupo.peso_total }} kg</p>
+        <p class="text-sm text-slate-600 mb-1">{{ grupo.paletes.0.descricao }} — {{ grupo.peso_total|peso }} kg</p>
         <p class="text-sm text-slate-600">Endereço: <strong class="text-slate-800">{{ grupo.endereco.codigo }}</strong></p>
     </div>
 
@@ -45,23 +34,23 @@
         <div class="flex items-center gap-2.5">
             <span class="w-8 h-8 rounded-full bg-primary-600 text-white flex items-center justify-center font-bold shrink-0" aria-hidden="true">●</span>
             <div>
-                <div class="text-xs uppercase text-slate-500 tracking-wide">Início</div>
+                <div class="text-sm text-slate-600">Início</div>
                 <div class="font-semibold text-slate-800">Corredor {{ grupo.endereco.corredor }} — Posição 01 (Andar {{ grupo.endereco.andar }})</div>
             </div>
         </div>
         <div class="flex flex-col items-center flex-1 min-w-[70px]" aria-hidden="true">
             <span class="text-2xl font-bold text-primary-700 leading-none">→</span>
-            <small class="text-slate-500 text-xs">{{ grupo.endereco.posicao }} posição(ões)</small>
+            <small class="text-slate-600 text-xs">{{ grupo.endereco.posicao }} posição(ões)</small>
         </div>
         <div class="flex items-center gap-2.5">
             <span class="w-8 h-8 rounded-full bg-danger-600 text-white flex items-center justify-center font-bold shrink-0" aria-hidden="true">★</span>
             <div>
-                <div class="text-xs uppercase text-slate-500 tracking-wide">Destino</div>
+                <div class="text-sm text-slate-600">Destino</div>
                 <div class="font-semibold text-slate-800">{{ grupo.endereco.codigo }}</div>
             </div>
         </div>
     </div>
-    <p class="text-sm text-slate-500 mb-5">
+    <p class="text-sm text-slate-600 mb-5">
         Empilhador: vá ao corredor {{ grupo.endereco.corredor }}, andar {{ grupo.endereco.andar }}, e siga da
         posição 01 até a posição {{ grupo.endereco.posicao|stringformat:"02d" }} — trajeto destacado em verde na grade
         abaixo, terminando no endereço em vermelho.

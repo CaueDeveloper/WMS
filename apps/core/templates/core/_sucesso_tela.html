@@ -1,0 +1,49 @@
+{% comment %}Aviso de sucesso em tela cheia (fundo verde + check). Uso: include com `texto`; `erro=True` gera a variante vermelha (X) usada na reprovação; `rapida=True` fecha em 1,5 s. Estilos inline de propósito.{% endcomment %}
+<style>
+#sucesso-tela { animation: sucesso-fade .35s ease-out both; }
+#sucesso-tela.saindo { animation: sucesso-fade-out .3s ease-in both; }
+#sucesso-tela .sucesso-icone { animation: sucesso-pop .55s cubic-bezier(.34,1.56,.64,1) .1s both; }
+#sucesso-tela .sucesso-check, #sucesso-tela .sucesso-x { stroke-dasharray: 24; stroke-dashoffset: 24; animation: sucesso-traco .5s ease-out .45s forwards; }
+#sucesso-tela .sucesso-x + .sucesso-x { animation-delay: .7s; }
+#sucesso-tela .sucesso-texto { animation: sucesso-sobe .5s ease-out .6s both; }
+@keyframes sucesso-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sucesso-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes sucesso-pop { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: scale(1); } }
+@keyframes sucesso-traco { to { stroke-dashoffset: 0; } }
+@keyframes sucesso-sobe { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+    #sucesso-tela, #sucesso-tela * { animation-duration: .01ms !important; animation-delay: 0s !important; }
+}
+</style>
+<div id="sucesso-tela" role="status" aria-live="polite"
+     style="position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.5rem;padding:2rem;background:{% if erro %}#dc2626{% else %}#16a34a{% endif %};color:#fff;text-align:center;cursor:pointer">
+    <svg class="sucesso-icone" width="144" height="144" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"
+         style="width:9rem;height:9rem;border:6px solid #fff;border-radius:9999px;padding:1.5rem">
+        {% if erro %}<path class="sucesso-x" d="M6.5 6.5l11 11"/><path class="sucesso-x" d="M17.5 6.5l-11 11"/>{% else %}<path class="sucesso-check" d="M4.5 12.75l6 6 9-13.5"/>{% endif %}
+    </svg>
+    <div class="sucesso-texto" style="display:flex;flex-direction:column;align-items:center;gap:1.5rem">
+        <p style="margin:0;font-size:1.75rem;font-weight:700">{% if erro %}Palete reprovado!{% else %}Ação realizada com sucesso!{% endif %}</p>
+        <p style="margin:0;max-width:40rem;font-size:1.125rem">{{ texto }}</p>
+        <button type="button" id="sucesso-tela-ok"
+                style="margin-top:1rem;min-height:3rem;padding:0.5rem 2.5rem;border:2px solid #fff;border-radius:0.5rem;background:transparent;color:#fff;font-size:1.125rem;font-weight:600;cursor:pointer">OK</button>
+    </div>
+</div>
+<script>
+(function () {
+    var tela = document.getElementById('sucesso-tela');
+    var ok = document.getElementById('sucesso-tela-ok');
+    function fechar() {
+        if (!tela) return;
+        var t = tela; tela = null;
+        t.classList.add('saindo');
+        setTimeout(function () { t.remove(); }, 300);
+        // devolve o foco ao campo de bipagem (bipagem contínua no coletor)
+        var barcode = document.getElementById('id_barcode_palete');
+        if (barcode) barcode.focus();
+    }
+    tela.addEventListener('click', fechar);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') fechar(); });
+    setTimeout(fechar, {% if rapida %}1500{% else %}4000{% endif %});
+    {% if not rapida %}ok.focus();{% endif %}
+})();
+</script>

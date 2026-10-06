@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import Count
 from django.utils import timezone
 
 from apps.recebimento.models import Palete, registrar_historico
@@ -59,7 +60,13 @@ def alocar_lote(lote, corredor, andar, usuario=None, permitir_parcial=False):
     )
     if not enderecos:
         raise Endereco.DoesNotExist(f'Corredor {corredor}, andar {andar} não encontrado ou inativo.')
-    livres = [e for e in enderecos if e.ocupacao_atual < e.capacidade]
+    # Ocupação lida da tabela de paletes, depois de travar os endereços (a
+    # trava serializa alocações concorrentes no mesmo corredor/andar).
+    ocupacao = dict(
+        Palete.objects.filter(estado='ARMAZENADO', endereco__in=enderecos)
+        .values_list('endereco').annotate(n=Count('pk'))
+    )
+    livres = [e for e in enderecos if ocupacao.get(e.pk, 0) < e.capacidade]
 
     if permitir_parcial:
         if not livres:
@@ -78,9 +85,7 @@ def alocar_lote(lote, corredor, andar, usuario=None, permitir_parcial=False):
         palete.estado = 'ARMAZENADO'
         palete.atualizado_em = agora
         palete.armazenado_em = agora
-        endereco.ocupacao_atual += 1
     Palete.objects.bulk_update(paletes, ['endereco', 'estado', 'atualizado_em', 'armazenado_em'])
-    Endereco.objects.bulk_update(destinos, ['ocupacao_atual'])
 
     registrar_historico(paletes, 'ARMAZENADO', usuario=usuario)
     return destinos, paletes
@@ -88,12 +93,11 @@ def alocar_lote(lote, corredor, andar, usuario=None, permitir_parcial=False):
 
 @transaction.atomic
 def retirar_palete_do_mapa(palete, usuario=None):
-    """Retira um palete ARMAZENADO do mapa (saída física): libera a vaga e
-    marca RETIRADO. Trava a própria linha do Palete primeiro (mesmo padrão de
-    `aprovar_lote` em apps/recebimento/services.py) porque, ao contrário de
-    `alocar_lote`, o endereço de origem vem de estado mutável do palete — sem
-    essa trava, duas ações concorrentes no mesmo palete poderiam decrementar
-    a ocupação da origem duas vezes.
+    """Retira um palete ARMAZENADO do mapa (saída física): libera a vaga
+    (a ocupação é derivada dos paletes) e marca RETIRADO. Trava a própria
+    linha do Palete primeiro (mesmo padrão de `aprovar_lote` em
+    apps/recebimento/services.py) para que duas ações concorrentes no mesmo
+    palete não retirem duas vezes.
     """
     palete = Palete.objects.select_for_update().get(pk=palete.pk)
     if palete.estado != 'ARMAZENADO' or palete.endereco_id is None:
@@ -102,10 +106,7 @@ def retirar_palete_do_mapa(palete, usuario=None):
             '(pode ter sido alterado por outra operação). Atualize e tente novamente.'
         )
 
-    endereco = Endereco.objects.select_for_update().get(pk=palete.endereco_id)
-    endereco.ocupacao_atual = max(endereco.ocupacao_atual - 1, 0)
-    endereco.save(update_fields=['ocupacao_atual'])
-
+    endereco = palete.endereco
     palete.endereco = None
     palete.estado = 'RETIRADO'
     palete.retirado_em = timezone.now()

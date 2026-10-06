@@ -5,7 +5,7 @@ from .models import AreaDestino, Endereco, Produto
 
 @admin.register(Endereco)
 class EnderecoAdmin(admin.ModelAdmin):
-    list_display = ('codigo', 'corredor', 'andar', 'posicao', 'capacidade', 'ocupacao_atual', 'ativo')
+    list_display = ('codigo', 'corredor', 'andar', 'posicao', 'capacidade', 'ativo')
     list_filter = ('corredor', 'andar', 'ativo')
     search_fields = ('codigo',)
     ordering = ('corredor', 'andar', 'posicao')

@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.db.models import Count, F, Sum
+from django.db.models import Count, F, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.dateparse import parse_date
@@ -21,7 +21,7 @@ from .services import (
 CORREDORES = Endereco.CORREDORES
 ANDARES = list(Endereco.ANDARES)
 POSICOES = Endereco.POSICOES
-ITENS_POR_PAGINA_MAPA = 20
+ITENS_POR_PAGINA_MAPA = 100
 ITENS_POR_PAGINA_BUSCA = 20
 
 
@@ -43,7 +43,10 @@ def _construir_grade(andar, vagas_necessarias=None):
     (Put-away), `disponivel=True` se o corredor comporta essa quantidade — o
     template usa isso pra habilitar o botão do corredor. Sem
     `vagas_necessarias` (Mapa de Estoque), a grade é somente leitura."""
-    enderecos = {(e.corredor, e.posicao): e for e in Endereco.objects.filter(andar=andar)}
+    enderecos = {
+        (e.corredor, e.posicao): e
+        for e in Endereco.objects.filter(andar=andar).com_ocupacao()
+    }
     linhas = []
     for corredor in CORREDORES:
         celulas = []
@@ -53,7 +56,7 @@ def _construir_grade(andar, vagas_necessarias=None):
             if endereco is None:
                 celulas.append(None)
                 continue
-            if endereco.ocupacao_atual >= endereco.capacidade:
+            if endereco.ocupacao >= endereco.capacidade:
                 estado = 'ocupado'
             elif endereco.ativo:
                 estado = 'livre'
@@ -73,11 +76,10 @@ def _construir_grade(andar, vagas_necessarias=None):
 def _resumo_andares():
     """Posições livres/total por andar (endereços ativos), para o filtro de andar."""
     resumo = {a: {'numero': a, 'livres': 0, 'total': 0} for a in ANDARES}
-    for linha in Endereco.objects.filter(ativo=True).values('andar').annotate(
-        capacidade=Sum('capacidade'), ocupacao=Sum('ocupacao_atual'),
-    ):
-        resumo[linha['andar']]['total'] = linha['capacidade']
-        resumo[linha['andar']]['livres'] = linha['capacidade'] - linha['ocupacao']
+    for endereco in Endereco.objects.filter(ativo=True).com_ocupacao():
+        item = resumo[endereco.andar]
+        item['total'] += endereco.capacidade
+        item['livres'] += max(endereco.capacidade - endereco.ocupacao, 0)
     return list(resumo.values())
 
 
@@ -104,11 +106,9 @@ def _maior_vaga_disponivel():
     pendente for maior que isso, ele não cabe inteiro em lugar nenhum — é o
     gatilho da armazenagem parcial do Put-away (ver `alocar_lote`,
     `permitir_parcial`)."""
-    grupos = (
-        Endereco.objects.filter(ativo=True, ocupacao_atual__lt=F('capacidade'))
-        .values('corredor', 'andar').annotate(livres=Count('pk'))
-    )
-    return max((g['livres'] for g in grupos), default=0)
+    livres = Endereco.objects.filter(ativo=True).com_ocupacao().filter(ocupacao__lt=F('capacidade'))
+    grupos = livres.values('corredor', 'andar').annotate(vagas=Count('pk'))
+    return max((g['vagas'] for g in grupos), default=0)
 
 
 def _redirect_com_lote(lote, andar=None):
@@ -279,19 +279,6 @@ def _filtrar_grade(grade, corredor=None):
     return [linha for linha in grade if linha['corredor'] == corredor]
 
 
-def _buscar_paletes_por_filtro_mapa(andar=None, corredor=None):
-    """Lista os paletes ARMAZENADO do mapa inteiro, opcionalmente filtrados
-    por andar e/ou corredor (modo 'Consultar por Endereço'). Sem nenhum
-    filtro, devolve todos os ARMAZENADO — usado pela consulta de mapa
-    inteiro."""
-    paletes = Palete.objects.filter(estado='ARMAZENADO').select_related('endereco', 'area_destino')
-    if andar is not None:
-        paletes = paletes.filter(endereco__andar=andar)
-    if corredor is not None:
-        paletes = paletes.filter(endereco__corredor=corredor)
-    return paletes.order_by('endereco__corredor', 'endereco__andar', 'endereco__posicao')
-
-
 def _buscar_armazenamento_do_palete(request, barcode):
     """Busca o Palete ARMAZENADO de `barcode` e monta seu grupo (endereço,
     trajeto). Em qualquer falha grava messages.error(...) e devolve None."""
@@ -334,42 +321,219 @@ def plano_armazenagem(request):
     })
 
 
+VISOES_MAPA = (
+    ('ocupacao', 'Ocupação geral', 'chart'),
+    ('andares', 'Andares', 'layers'),
+    ('corredores', 'Corredores', 'columns'),
+    ('guardas', 'Guardas', 'cube'),
+    ('geral', 'Visão geral', 'map'),
+)
+NIVEIS_MAPA = (('livre', 'Livre'), ('ocupado', 'Ocupado'), ('inativo', 'Inativo'))
+MODOS_MAPA = (('simples', 'Simples'), ('complexo', 'Complexo'))
+
+
+def _estado_endereco(endereco):
+    if endereco.ocupacao >= endereco.capacidade:
+        return 'ocupado'
+    return 'livre' if endereco.ativo else 'inativo'
+
+
+_ROTULOS_FILTRO = {
+    'andar': lambda v: f'Andar {v}',
+    'nivel': lambda v: dict(NIVEIS_MAPA)[v],
+    'corredor': lambda v: f'Corredor {v}',
+    'guarda': lambda v: f'Guarda {v:02d}',
+}
+
+
+def _filtros_mapa(get):
+    """Lê os filtros do Mapa de Estoque (andar, nível de ocupação, corredor,
+    guarda) da querystring; valor inválido ou ausente vira None (sem filtro)."""
+    andar = str(get.get('andar') or '').strip()
+    guarda = str(get.get('guarda') or '').strip()
+    nivel = str(get.get('nivel') or '').strip()
+    return {
+        'andar': int(andar) if andar.isdigit() and int(andar) in ANDARES else None,
+        'nivel': nivel if nivel in dict(NIVEIS_MAPA) else None,
+        'corredor': _corredor_valido(get.get('corredor')),
+        'guarda': int(guarda) if guarda.isdigit() and int(guarda) in POSICOES else None,
+    }
+
+
+def _enderecos_mapa(filtros):
+    """Endereços que passam pelos filtros, ordenados por andar/corredor/guarda,
+    cada um com `estado` ('livre', 'ocupado' ou 'inativo')."""
+    consulta = Endereco.objects.com_ocupacao().order_by('andar', 'corredor', 'posicao')
+    if filtros['andar']:
+        consulta = consulta.filter(andar=filtros['andar'])
+    if filtros['corredor']:
+        consulta = consulta.filter(corredor=filtros['corredor'])
+    if filtros['guarda']:
+        consulta = consulta.filter(posicao=filtros['guarda'])
+    enderecos = list(consulta)
+    for endereco in enderecos:
+        endereco.estado = _estado_endereco(endereco)
+    if filtros['nivel']:
+        enderecos = [e for e in enderecos if e.estado == filtros['nivel']]
+    return enderecos
+
+
+def _resumir_enderecos(enderecos):
+    """Totais por estado e % de ocupação (ocupados sobre ativos). `nivel` é a
+    faixa de cor (baixo/medio/alto/cheio/vazio) usada no modo simples."""
+    livres = sum(1 for e in enderecos if e.estado == 'livre')
+    ocupados = sum(1 for e in enderecos if e.estado == 'ocupado')
+    ativos = livres + ocupados
+    percentual = round(ocupados / ativos * 100) if ativos else 0
+    if not ativos:
+        nivel = 'vazio'
+    elif percentual >= 100:
+        nivel = 'cheio'
+    elif percentual >= 75:
+        nivel = 'alto'
+    elif percentual >= 50:
+        nivel = 'medio'
+    else:
+        nivel = 'baixo'
+    return {
+        'total': len(enderecos),
+        'livres': livres,
+        'ocupados': ocupados,
+        'inativos': len(enderecos) - ativos,
+        'percentual': percentual,
+        'nivel': nivel,
+        'paletes': sum(e.ocupacao for e in enderecos),
+    }
+
+
+def _agrupar(enderecos, chave):
+    grupos = {}
+    for endereco in enderecos:
+        grupos.setdefault(getattr(endereco, chave), []).append(endereco)
+    return grupos
+
+
+def _grade_do_andar(enderecos):
+    """Grade (corredor × guarda) só com os corredores e guardas presentes em
+    `enderecos` (os já filtrados de um andar). Células sem endereço são None."""
+    por_posicao = {(e.corredor, e.posicao): e for e in enderecos}
+    corredores = [c for c in CORREDORES if any(e.corredor == c for e in enderecos)]
+    posicoes = sorted({e.posicao for e in enderecos})
+    linhas = [
+        {'corredor': corredor, 'celulas': [por_posicao.get((corredor, posicao)) for posicao in posicoes]}
+        for corredor in corredores
+    ]
+    return {'posicoes': posicoes, 'linhas': linhas}
+
+
+def _url_mapa(parametros, **alterar):
+    """URL do mapa com os parâmetros atuais, sobrescrevendo/removendo (valor
+    None) os de `alterar`. Mudar qualquer coisa que não seja a página volta
+    para a página 1."""
+    novos = {**parametros, **alterar}
+    if 'pg' not in alterar:
+        novos.pop('pg', None)
+    novos = {k: v for k, v in novos.items() if v not in (None, '')}
+    base = reverse('estoque:mapa_estoque')
+    return f'{base}?{urlencode(novos)}' if novos else base
+
+
+def _opcoes(parametros, chave, valores, atual):
+    opcoes = [{'valor': '', 'rotulo': 'Todos', 'url': _url_mapa(parametros, **{chave: None}), 'ativo': atual is None}]
+    for valor, rotulo in valores:
+        opcoes.append({
+            'valor': valor,
+            'rotulo': rotulo,
+            'url': _url_mapa(parametros, **{chave: valor}),
+            'ativo': atual is not None and str(atual) == str(valor),
+        })
+    return opcoes
+
+
 @group_required('Administradores', 'Gestor Produção', 'Gestor Logística')
 def mapa_estoque(request):
-    andar = _andar_valido(request.GET.get('andar'))
-    grade = _construir_grade(andar)
+    visao = request.GET.get('visao')
+    visao = visao if visao in {v[0] for v in VISOES_MAPA} else 'ocupacao'
+    modo = request.GET.get('modo')
+    modo = modo if modo in dict(MODOS_MAPA) else 'simples'
+    filtros = _filtros_mapa(request.GET)
 
-    paginator_armazenados = Paginator(
-        Palete.objects.filter(estado='ARMAZENADO')
-        .select_related('endereco', 'area_destino')
-        .order_by('endereco__corredor', 'endereco__andar', 'endereco__posicao'),
-        ITENS_POR_PAGINA_MAPA,
-    )
-    paletes_armazenados = paginator_armazenados.get_page(request.GET.get('pg_armazenados'))
+    parametros = {'visao': visao, 'modo': modo}
+    parametros.update({k: v for k, v in filtros.items() if v is not None})
 
-    total_paletes_pendentes_armazenagem = Palete.objects.filter(estado='CONFERIDO_LOGISTICA').count()
+    enderecos = _enderecos_mapa(filtros)
+    corredores_existentes = Endereco.objects.values_list('corredor', flat=True).distinct()
+    contexto = {
+        'visao': visao,
+        'modo': modo,
+        'filtros': filtros,
+        'tem_filtro': any(v is not None for v in filtros.values()),
+        'resumo': _resumir_enderecos(enderecos),
+        'visoes': [
+            {'chave': chave, 'rotulo': rotulo, 'icone': icone,
+             'url': _url_mapa(parametros, visao=chave), 'ativo': chave == visao}
+            for chave, rotulo, icone in VISOES_MAPA
+        ],
+        'modos': [
+            {'chave': chave, 'rotulo': rotulo, 'url': _url_mapa(parametros, modo=chave), 'ativo': chave == modo}
+            for chave, rotulo in MODOS_MAPA
+        ],
+        'url_limpar': _url_mapa({'visao': visao, 'modo': modo}),
+        'filtros_ativos': [
+            {'rotulo': rotulo(filtros[chave]), 'url': _url_mapa(parametros, **{chave: None})}
+            for chave, rotulo in _ROTULOS_FILTRO.items()
+            if filtros[chave] is not None
+        ],
+        'opcoes_andar': _opcoes(parametros, 'andar', [(a, f'Andar {a}') for a in ANDARES], filtros['andar']),
+        'opcoes_nivel': _opcoes(parametros, 'nivel', NIVEIS_MAPA, filtros['nivel']),
+        'opcoes_corredor': _opcoes(
+            parametros, 'corredor', [(c, c) for c in CORREDORES if c in set(corredores_existentes)], filtros['corredor'],
+        ),
+        'opcoes_guarda': _opcoes(parametros, 'guarda', [(p, f'{p:02d}') for p in POSICOES], filtros['guarda']),
+    }
 
-    totais = Endereco.objects.filter(ativo=True).aggregate(
-        capacidade=Sum('capacidade'), ocupacao=Sum('ocupacao_atual'),
-    )
-    capacidade_total = totais['capacidade'] or 0
-    ocupacao_total = totais['ocupacao'] or 0
-    percentual_geral = round(ocupacao_total / capacidade_total * 100) if capacidade_total else 0
+    if visao == 'ocupacao':
+        contexto['por_andar'] = [
+            {
+                'andar': andar,
+                'resumo': _resumir_enderecos(itens),
+                'url': _url_mapa(parametros, visao='andares', andar=andar),
+            }
+            for andar, itens in sorted(_agrupar(enderecos, 'andar').items())
+        ]
+    elif visao in ('andares', 'geral'):
+        contexto['andares_grade'] = [
+            {'andar': andar, 'resumo': _resumir_enderecos(itens), 'grade': _grade_do_andar(itens)}
+            for andar, itens in sorted(_agrupar(enderecos, 'andar').items())
+        ]
+    elif visao == 'corredores':
+        contexto['corredores'] = [
+            {
+                'corredor': corredor,
+                'resumo': _resumir_enderecos(itens),
+                'url': _url_mapa(parametros, visao='guardas', corredor=corredor),
+                'por_andar': [
+                    {'andar': andar, 'resumo': _resumir_enderecos(sub)}
+                    for andar, sub in sorted(_agrupar(itens, 'andar').items())
+                ],
+            }
+            for corredor, itens in sorted(_agrupar(enderecos, 'corredor').items())
+        ]
+    else:
+        pagina = Paginator(enderecos, ITENS_POR_PAGINA_MAPA).get_page(request.GET.get('pg'))
+        barcodes = dict(
+            Palete.objects.filter(estado='ARMAZENADO', endereco__in=[e.pk for e in pagina])
+            .values_list('endereco_id', 'barcode_palete')
+        )
+        for endereco in pagina:
+            endereco.barcode = barcodes.get(endereco.pk)
+        contexto['pagina'] = pagina
+        contexto['url_anterior'] = (
+            _url_mapa(parametros, pg=pagina.previous_page_number()) if pagina.has_previous() else None
+        )
+        contexto['url_proximo'] = _url_mapa(parametros, pg=pagina.next_page_number()) if pagina.has_next() else None
 
-    return render(request, 'estoque/mapa_estoque.html', {
-        'grade': grade,
-        'grade_titulo': f'Andar {andar}',
-        'posicoes': POSICOES,
-        'andar': andar,
-        'andares': _resumo_andares(),
-        'query_extra': '',
-        'paletes_armazenados': paletes_armazenados,
-        'total_paletes_armazenados': paginator_armazenados.count,
-        'total_paletes_pendentes_armazenagem': total_paletes_pendentes_armazenagem,
-        'capacidade_total': capacidade_total,
-        'ocupacao_total': ocupacao_total,
-        'percentual_geral': percentual_geral,
-    })
+    return render(request, 'estoque/mapa_estoque.html', contexto)
 
 
 def _buscar_palete(request, barcode):
@@ -421,11 +585,9 @@ def _buscar_paletes_por_endereco(request, codigo_endereco):
 
 def _buscar_paletes_por_criterios(request, lote, sku, data_fabricacao_str):
     """Busca Palete por lote/SKU/data de fabricação — qualquer combinação
-    preenchida filtra, em AND. 'Data de fabricação' não é um campo próprio:
-    é a data em que o palete foi criado no recebimento (`Palete.criado_em`),
-    já que nada no recebimento é digitado livremente além de Produto/Lote
-    (mesmo espírito de PESO_FIXO_RECEBIMENTO_KG). Em qualquer falha grava
-    messages.error(...) e devolve None."""
+    preenchida filtra, em AND. A data filtra `Palete.data_fabricacao`; paletes
+    antigos (sem o campo) são casados pela data de criação (`criado_em`). Em
+    qualquer falha grava messages.error(...) e devolve None."""
     lote = (lote or '').strip().upper()
     sku = (sku or '').strip()
     data_fabricacao_str = (data_fabricacao_str or '').strip()
@@ -444,7 +606,10 @@ def _buscar_paletes_por_criterios(request, lote, sku, data_fabricacao_str):
         if data_fabricacao is None:
             messages.error(request, 'Data de fabricação inválida.')
             return None
-        paletes = paletes.filter(criado_em__date=data_fabricacao)
+        paletes = paletes.filter(
+            Q(data_fabricacao=data_fabricacao)
+            | Q(data_fabricacao__isnull=True, criado_em__date=data_fabricacao)
+        )
 
     resultados = list(paletes.order_by('-criado_em'))
     if not resultados:
@@ -455,6 +620,22 @@ def _buscar_paletes_por_criterios(request, lote, sku, data_fabricacao_str):
 
 @group_required('Administradores', 'Operador Produção', 'Operador Logística', 'Gestor Produção', 'Gestor Logística')
 def consultar_palete(request):
+    def _linha_do_tempo(palete):
+        """Uma linha por etapa (criação, aprovações, armazenagem, retirada)
+        com quem fez e quando; etapa ainda não ocorrida fica com evento None."""
+        etapas = [
+            ('CRIADO', 'Fabricado / criado por'),
+            ('REPROVADO', 'Reprovado por'),
+            ('CONFERIDO', 'Aprovado na Produção por'),
+            ('CONFERIDO_LOGISTICA', 'Aprovado na Logística por'),
+            ('ARMAZENADO', 'Armazenado por'),
+            ('RETIRADO', 'Retirado por'),
+        ]
+        eventos = {}
+        for h in palete.historico.select_related('usuario'):
+            eventos[h.estado] = h  # a ocorrência mais recente de cada etapa prevalece
+        return [{'rotulo': rotulo, 'evento': eventos.get(estado)} for estado, rotulo in etapas]
+
     if request.method == 'POST':
         barcode = (request.POST.get('barcode_palete') or '').strip()
 
@@ -489,6 +670,7 @@ def consultar_palete(request):
             'modo': 'palete',
             'barcode': barcode,
             'palete': palete,
+            'linha_do_tempo': _linha_do_tempo(palete) if palete else None,
         })
 
     if modo == 'lote':
@@ -517,14 +699,9 @@ def consultar_palete(request):
         corredor = _corredor_valido(request.GET.get('corredor'))
 
         filtro_submetido = not codigo_endereco and ('andar' in request.GET or 'corredor' in request.GET)
-        resultados_mapa = None
         grade = _construir_grade(andar_filtro or 1)
         if filtro_submetido:
             grade = _filtrar_grade(grade, corredor=corredor)
-            paginator = Paginator(
-                _buscar_paletes_por_filtro_mapa(andar=andar_filtro, corredor=corredor), ITENS_POR_PAGINA_BUSCA,
-            )
-            resultados_mapa = paginator.get_page(request.GET.get('pg'))
 
         endereco, paletes = _buscar_paletes_por_endereco(request, codigo_endereco)
         return render(request, 'estoque/consultar_palete.html', {
@@ -540,7 +717,6 @@ def consultar_palete(request):
             'corredor': corredor or '',
             'grade_titulo': f'Andar {andar_filtro or 1}',
             'filtro_submetido': filtro_submetido,
-            'resultados_mapa': resultados_mapa,
         })
 
     return render(request, 'estoque/consultar_palete.html', {'modo': None})

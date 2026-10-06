@@ -1,12 +1,13 @@
 from decimal import Decimal
 
 from django import forms
+from django.utils import timezone
 
 from apps.estoque.models import Produto
 
 from .models import Palete
 
-ESTADOS_LOTE_EM_PRODUCAO = ('CRIADO', 'EM_TRANSFERENCIA')
+ESTADOS_LOTE_EM_PRODUCAO = ('CRIADO', 'EM_TRANSFERENCIA', 'REPROVADO')
 
 
 _CLASSE_CAMPO = 'input-field input-field-lg'
@@ -30,12 +31,14 @@ class RecebimentoForm(forms.Form):
         initial=1,
         widget=forms.NumberInput(attrs={'autocomplete': 'off', 'class': _CLASSE_CAMPO}),
     )
-    peso_variavel = forms.TypedChoiceField(
-        label='Peso variável?',
-        choices=((False, 'Não'), (True, 'Sim')),
-        coerce=lambda v: v == 'True',
-        initial=False,
-        widget=forms.Select(attrs={'class': _CLASSE_CAMPO}),
+    data_fabricacao = forms.DateField(
+        label='Data de Fabricação',
+        widget=forms.DateInput(attrs={'type': 'date', 'class': _CLASSE_CAMPO}, format='%Y-%m-%d'),
+    )
+    peso_variavel = forms.BooleanField(
+        label='Peso diferente de 500 kg',
+        required=False,
+        widget=forms.CheckboxInput(attrs={'class': 'h-6 w-6'}),
     )
     peso_kg = forms.DecimalField(
         label='Peso (kg)',
@@ -45,6 +48,16 @@ class RecebimentoForm(forms.Form):
         required=False,
         widget=forms.NumberInput(attrs={'step': '0.001', 'autocomplete': 'off', 'class': _CLASSE_CAMPO}),
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['data_fabricacao'].widget.attrs['max'] = timezone.localdate().isoformat()
+
+    def clean_data_fabricacao(self):
+        data = self.cleaned_data['data_fabricacao']
+        if data > timezone.localdate():
+            raise forms.ValidationError('A data de fabricação não pode ser futura.')
+        return data
 
     def clean_lote(self):
         lote = self.cleaned_data['lote'].strip().upper()
@@ -60,3 +73,31 @@ class RecebimentoForm(forms.Form):
         if cleaned_data.get('peso_variavel') and not cleaned_data.get('peso_kg'):
             self.add_error('peso_kg', 'Informe o peso do palete.')
         return cleaned_data
+
+
+class CorrecaoPaleteForm(forms.Form):
+    """Correção, pelo Gestor, de um palete reprovado (item e peso; a data é opcional)."""
+
+    produto = forms.ModelChoiceField(
+        queryset=Produto.objects.filter(ativo=True),
+        label='Item',
+        widget=forms.Select(attrs={'class': 'input-field'}),
+    )
+    peso_kg = forms.DecimalField(
+        label='Peso (kg)',
+        max_digits=12,
+        decimal_places=3,
+        min_value=Decimal('0.001'),
+        widget=forms.NumberInput(attrs={'step': '0.001', 'class': 'input-field'}),
+    )
+    data_fabricacao = forms.DateField(
+        label='Data de Fabricação',
+        required=False,
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'input-field'}, format='%Y-%m-%d'),
+    )
+
+    def clean_data_fabricacao(self):
+        data = self.cleaned_data['data_fabricacao']
+        if data and data > timezone.localdate():
+            raise forms.ValidationError('A data de fabricação não pode ser futura.')
+        return data

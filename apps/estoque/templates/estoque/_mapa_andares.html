@@ -1,0 +1,75 @@
+{# Andares (codigo_completo=False: só o nº da guarda) e Visão geral (codigo_completo=True: endereço completo). #}
+{% if modo == 'simples' %}
+<div class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-700">
+    <span class="inline-flex items-center gap-1.5"><span class="h-4 w-4 rounded border border-emerald-400 bg-emerald-100"></span>Livre</span>
+    <span class="inline-flex items-center gap-1.5"><span class="h-4 w-4 rounded bg-rose-600"></span>Ocupada</span>
+    <span class="inline-flex items-center gap-1.5"><span class="h-4 w-4 rounded bg-slate-200 text-center text-[10px] leading-4 text-slate-600 line-through">1</span>Inativa</span>
+    <span class="inline-flex items-center gap-1.5"><span class="h-4 w-4 rounded border border-dashed border-slate-400"></span>Sem endereço</span>
+</div>
+{% endif %}
+
+{% for item in andares_grade %}
+<section class="mb-5 rounded-lg border border-slate-200 bg-white {% if modo == 'simples' %}p-4{% else %}p-3{% endif %}">
+    {% if modo == 'simples' %}
+        <div class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <h3 class="text-base font-semibold text-slate-800">Andar {{ item.andar }}</h3>
+            <div class="flex items-center gap-2">
+                <div class="h-2.5 w-32 overflow-hidden rounded-full bg-slate-100 cor-nivel-{{ item.resumo.nivel }}">
+                    <div class="h-full rounded-full bg-current" style="width: {{ item.resumo.percentual }}%"></div>
+                </div>
+                <span class="text-sm font-bold text-slate-700">{{ item.resumo.percentual }}%</span>
+            </div>
+            <span class="text-xs text-slate-600">{{ item.resumo.ocupados }} ocupadas · {{ item.resumo.livres }} livres{% if item.resumo.inativos %} · {{ item.resumo.inativos }} inativas{% endif %}</span>
+        </div>
+
+        <div class="overflow-x-auto pb-1">
+            <div class="grid gap-1" style="grid-template-columns: 1.75rem repeat({{ item.grade.posicoes|length }}, minmax({% if codigo_completo %}6.5rem{% else %}2.75rem{% endif %}, 1fr)); min-width: max-content;">
+                <div></div>
+                {% for posicao in item.grade.posicoes %}
+                    <div class="text-center text-sm font-semibold text-slate-700">{{ posicao|stringformat:"02d" }}</div>
+                {% endfor %}
+                {% for linha in item.grade.linhas %}
+                    <div class="flex items-center justify-center text-sm font-bold text-slate-700">{{ linha.corredor }}</div>
+                    {% for celula in linha.celulas %}
+                        {% if celula %}
+                        <div title="{{ celula.codigo }} — {{ celula.estado|capfirst }}" aria-label="{{ celula.codigo }}, {{ celula.estado }}"
+                             class="flex items-center justify-center rounded text-center font-semibold {% if codigo_completo %}min-h-9 font-mono text-[11px]{% else %}min-h-11 text-sm{% endif %} {% if celula.estado == 'livre' %}border border-emerald-400 bg-emerald-100 text-emerald-900{% elif celula.estado == 'ocupado' %}bg-rose-600 text-white{% else %}bg-slate-200 text-slate-600 line-through{% endif %}">
+                            {% if codigo_completo %}{{ celula.codigo }}{% else %}{{ celula.posicao|stringformat:"02d" }}{% endif %}
+                        </div>
+                        {% else %}
+                        <div class="rounded border border-dashed border-slate-300" aria-hidden="true"></div>
+                        {% endif %}
+                    {% endfor %}
+                {% endfor %}
+            </div>
+        </div>
+    {% else %}
+        <h3 class="mb-1 text-sm font-bold">Andar {{ item.andar }} — {{ item.resumo.ocupados }} ocupados, {{ item.resumo.livres }} livres, {{ item.resumo.inativos }} inativos ({{ item.resumo.percentual }}%)</h3>
+        <div class="overflow-x-auto">
+        <table class="w-full border-collapse bg-white text-xs">
+            <caption class="sr-only">Andar {{ item.andar }}: situação de cada guarda por corredor</caption>
+            <thead>
+                <tr class="bg-slate-100">
+                    <th scope="col" class="border border-slate-400 px-2 py-1 text-left">Corredor</th>
+                    {% for posicao in item.grade.posicoes %}<th scope="col" class="border border-slate-400 px-2 py-1 text-center">{{ posicao|stringformat:"02d" }}</th>{% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for linha in item.grade.linhas %}
+                <tr>
+                    <th scope="row" class="border border-slate-400 px-2 py-1 text-left font-bold">{{ linha.corredor }}</th>
+                    {% for celula in linha.celulas %}
+                        <td class="whitespace-nowrap border border-slate-300 px-2 py-1 text-center">
+                            {% if celula %}{% if codigo_completo %}{{ celula.codigo }} {% endif %}{% if celula.estado == 'livre' %}L{% elif celula.estado == 'ocupado' %}O{% else %}I{% endif %}{% else %}—{% endif %}
+                        </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    {% endif %}
+</section>
+{% endfor %}
+
+{% if modo == 'complexo' %}<p class="text-xs text-slate-600">L = livre · O = ocupado · I = inativo · — = sem endereço</p>{% endif %}

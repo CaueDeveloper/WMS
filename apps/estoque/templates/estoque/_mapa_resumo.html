@@ -1,0 +1,28 @@
+{% if modo == 'simples' %}
+<div class="mb-4 grid grid-cols-2 divide-x divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white sm:grid-cols-4 sm:divide-y-0">
+    <div class="p-3">
+        <div class="text-xs text-slate-600">Paletes armazenados</div>
+        <div class="text-2xl font-bold text-slate-800">{{ resumo.paletes }}</div>
+    </div>
+    <div class="p-3">
+        <div class="flex items-center gap-1.5 text-xs text-slate-600"><span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>Guardas livres</div>
+        <div class="text-2xl font-bold text-emerald-700">{{ resumo.livres }}</div>
+    </div>
+    <div class="p-3">
+        <div class="flex items-center gap-1.5 text-xs text-slate-600"><span class="h-2.5 w-2.5 rounded-full bg-rose-600"></span>Guardas ocupadas</div>
+        <div class="text-2xl font-bold text-rose-700">{{ resumo.ocupados }}</div>
+    </div>
+    <div class="p-3">
+        <div class="text-xs text-slate-600">Ocupação</div>
+        <div class="flex items-center gap-2">
+            <span class="text-2xl font-bold text-slate-800">{{ resumo.percentual }}%</span>
+            <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-200 cor-nivel-{{ resumo.nivel }}"><div class="h-full bg-current" style="width: {{ resumo.percentual }}%"></div></div>
+        </div>
+    </div>
+</div>
+{% else %}
+<p class="mb-3 text-sm text-slate-700">
+    Endereços: {{ resumo.total }} · Livres: {{ resumo.livres }} · Ocupados: {{ resumo.ocupados }} ·
+    Inativos: {{ resumo.inativos }} · Paletes armazenados: {{ resumo.paletes }} · Ocupação: {{ resumo.percentual }}%
+</p>
+{% endif %}

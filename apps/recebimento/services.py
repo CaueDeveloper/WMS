@@ -12,6 +12,64 @@ class LoteIncompletoError(Exception):
     pass
 
 
+class PaleteStateError(Exception):
+    pass
+
+
+ESTADOS_REPROVAVEIS = {
+    'PRODUCAO': ('CRIADO', 'EM_TRANSFERENCIA'),
+    'LOGISTICA': ('CONFERIDO', 'EM_CONFERENCIA_LOGISTICA'),
+}
+
+
+def _bloquear_se_ha_reprovados(lote):
+    n = Palete.objects.filter(lote=lote, estado='REPROVADO').count()
+    if n:
+        raise LoteIncompletoError(
+            f'O lote {lote} tem {n} palete(s) reprovado(s) aguardando correção do Gestor — '
+            'corrija-os antes de aprovar o lote.'
+        )
+
+
+@transaction.atomic
+def reprovar_palete(barcode, etapa, usuario=None, motivo=''):
+    """Reprova um palete na `etapa` ('PRODUCAO' ou 'LOGISTICA'). Ele passa a
+    REPROVADO e fica visível ao Gestor da Produção para correção."""
+    palete = Palete.objects.select_for_update().filter(barcode_palete=(barcode or '').strip()).first()
+    if palete is None:
+        raise PaleteStateError(f'Palete "{barcode}" não encontrado.')
+    if palete.estado not in ESTADOS_REPROVAVEIS[etapa]:
+        raise PaleteStateError(
+            f'Palete {palete.barcode_palete} está "{palete.get_estado_display()}" — não pode ser reprovado agora.'
+        )
+    palete.estado = 'REPROVADO'
+    palete.reprovado_em = timezone.now()
+    palete.motivo_reprovacao = (motivo or '').strip()
+    palete.reprovado_na_etapa = etapa
+    palete.save(update_fields=['estado', 'reprovado_em', 'motivo_reprovacao', 'reprovado_na_etapa', 'atualizado_em'])
+    registrar_historico([palete], 'REPROVADO', usuario=usuario)
+    return palete
+
+
+@transaction.atomic
+def corrigir_palete(palete_id, produto, peso_kg, data_fabricacao=None, usuario=None):
+    """Aplica a correção do Gestor a um palete REPROVADO e o devolve ao início
+    do fluxo (CRIADO — aguardando nova bipagem de transferência)."""
+    palete = Palete.objects.select_for_update().filter(pk=palete_id).first()
+    if palete is None or palete.estado != 'REPROVADO':
+        raise PaleteStateError('Este palete não está mais aguardando correção.')
+    palete.sku = produto.sku
+    palete.descricao = produto.descricao
+    palete.peso_kg = peso_kg
+    if data_fabricacao:
+        palete.data_fabricacao = data_fabricacao
+    palete.estado = 'CRIADO'
+    palete.aprovado_producao_em = None
+    palete.save()
+    registrar_historico([palete], 'CRIADO', usuario=usuario)
+    return palete
+
+
 @transaction.atomic
 def aprovar_lote(lote, usuario=None):
     """Aprova em lote todos os paletes EM_TRANSFERENCIA de `lote`, promovendo-os a
@@ -31,6 +89,7 @@ def aprovar_lote(lote, usuario=None):
     )
     if not paletes_do_lote:
         raise LoteVazioError(f'Nenhum palete pendente de transferência para o lote {lote}.')
+    _bloquear_se_ha_reprovados(lote)
 
     pendentes_bipagem = [p for p in paletes_do_lote if p.estado == 'CRIADO']
     if pendentes_bipagem:
@@ -69,6 +128,7 @@ def aprovar_lote_logistica(lote, usuario=None):
     )
     if not paletes_do_lote:
         raise LoteVazioError(f'Nenhum palete pendente de conferência da logística para o lote {lote}.')
+    _bloquear_se_ha_reprovados(lote)
 
     pendentes_bipagem = [p for p in paletes_do_lote if p.estado == 'CONFERIDO']
     if pendentes_bipagem:

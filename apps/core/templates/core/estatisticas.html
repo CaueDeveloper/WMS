@@ -11,11 +11,11 @@
 
 {% block shell_content %}
 <div class="flex items-center justify-between gap-3 mb-4">
-    <p class="text-sm text-slate-500">
+    <p class="text-sm text-slate-600">
         Gráficos atualizados automaticamente a cada 10 minutos.
         Última atualização: <span id="ultima-atualizacao" class="font-medium text-slate-700">{% now "H:i:s" %}</span>
     </p>
-    <button type="button" id="btn-atualizar" class="btn btn-secondary shrink-0">↻ Atualizar agora</button>
+    <button type="button" id="btn-atualizar" class="btn btn-secondary shrink-0">{% include 'core/_icone.html' with nome='refresh' classe='h-4 w-4' %}Atualizar agora</button>
 </div>
 
 {% include 'core/_estat_kpis.html' %}
@@ -24,14 +24,14 @@
 <div class="grid gap-6 mb-6 xl:grid-cols-2">
     <section class="card-plain">
         <h2 class="mb-1">Fluxo diário de paletes</h2>
-        <p class="text-xs text-slate-500 mb-3">Paletes por dia em cada etapa: criados{% if pode_ver_producao %}, aprovados pela Produção{% endif %}{% if pode_ver_logistica %}, recebidos pela Logística{% endif %}.</p>
-        <div class="relative h-72"><canvas id="grafico-fluxo"></canvas></div>
+        <p class="text-xs text-slate-600 mb-3">Paletes por dia em cada etapa: criados{% if pode_ver_producao %}, aprovados pela Produção{% endif %}{% if pode_ver_logistica %}, recebidos pela Logística{% endif %}.</p>
+        <div class="relative h-72"><canvas id="grafico-fluxo" role="img" aria-label="Gráfico de linhas: paletes por dia em cada etapa do fluxo"></canvas></div>
     </section>
 
     <section class="card-plain">
         <h2 class="mb-1">Paletes criados por dia</h2>
-        <p class="text-xs text-slate-500 mb-3">Os 5 produtos de maior volume; os demais somados em "Outros".</p>
-        <div class="relative h-72"><canvas id="grafico-criados"></canvas></div>
+        <p class="text-xs text-slate-600 mb-3">Os 5 produtos de maior volume; os demais somados em "Outros".</p>
+        <div class="relative h-72"><canvas id="grafico-criados" role="img" aria-label="Gráfico de barras empilhadas: paletes criados por dia, por produto"></canvas></div>
     </section>
 </div>
 
@@ -39,14 +39,14 @@
     <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
         <div>
             <h2 class="mb-1">Por produto</h2>
-            <p class="text-xs text-slate-500">Maiores produtos em paletes criados.</p>
+            <p class="text-xs text-slate-600">Maiores produtos em paletes criados.</p>
         </div>
         <div class="inline-flex rounded border border-slate-300 overflow-hidden text-sm" role="group" aria-label="Métrica">
             <button type="button" class="px-3 py-1.5 bg-primary-600 text-white" data-metrica="quantidades">Quantidade</button>
             <button type="button" class="px-3 py-1.5 bg-white text-slate-700 hover:bg-slate-50" data-metrica="pesos">Peso (kg)</button>
         </div>
     </div>
-    <div class="relative mb-5" id="wrap-grafico-produto"><canvas id="grafico-produto"></canvas></div>
+    <div class="relative mb-5" id="wrap-grafico-produto"><canvas id="grafico-produto" role="img" aria-label="Gráfico de barras: volume por produto. Os mesmos valores estão na tabela abaixo."></canvas></div>
     {% include 'core/_estat_tabela.html' %}
 </section>
 {% endblock %}
