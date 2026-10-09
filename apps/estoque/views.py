@@ -3,6 +3,7 @@ from collections import Counter
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import Q
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.dateparse import parse_date
@@ -336,6 +337,7 @@ VISOES_MAPA = (
     ('corredores', 'Corredores', 'columns'),
     ('guardas', 'Guardas', 'cube'),
     ('geral', 'Visão geral', 'map'),
+    ('3d', 'Mapa 3D', 'cube'),
 )
 NIVEIS_MAPA = (('livre', 'Livre'), ('ocupado', 'Ocupado'), ('inativo', 'Inativo'))
 MODOS_MAPA = (('simples', 'Simples'), ('complexo', 'Complexo'))
@@ -543,6 +545,36 @@ def mapa_estoque(request):
         contexto['url_proximo'] = _url_mapa(parametros, pg=pagina.next_page_number()) if pagina.has_next() else None
 
     return render(request, 'estoque/mapa_estoque.html', contexto)
+
+
+@group_required('Administradores', 'Gestor Produção', 'Gestor Logística')
+def mapa_estoque_dados(request):
+    """Dados do Mapa de Estoque 3D em JSON compacto: um item por endereço
+    (respeitando os mesmos filtros da querystring do mapa) com o palete armazenado."""
+    enderecos = _enderecos_mapa(_filtros_mapa(request.GET))
+    paletes = {
+        p['endereco_id']: p
+        for p in Palete.objects.filter(estado='ARMAZENADO')
+        .values('pk', 'endereco_id', 'barcode_palete', 'sku', 'descricao', 'lote')
+    }
+    itens = []
+    for e in enderecos:
+        item = {'c': e.codigo, 'r': e.corredor, 'a': e.andar, 'p': e.posicao, 's': e.estado}
+        palete = paletes.get(e.pk)
+        if palete:
+            item['pl'] = {
+                'id': palete['pk'], 'b': palete['barcode_palete'], 'sku': palete['sku'],
+                'd': palete['descricao'], 'l': palete['lote'],
+                'url': reverse('estoque:inspecionar_palete', args=[palete['pk']]),
+            }
+        itens.append(item)
+    return JsonResponse({
+        'corredores': Endereco.CORREDORES,
+        'andares': list(ANDARES),
+        'posicoes': len(POSICOES),
+        'enderecos': itens,
+        'resumo': _resumir_enderecos(enderecos),
+    })
 
 
 def _buscar_palete(request, barcode):

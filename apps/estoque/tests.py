@@ -40,6 +40,49 @@ class MapaEstoqueTests(TestCase):
         self.assertEqual(r.context['resumo']['total'], 1)
 
 
+class MapaEstoque3DTests(TestCase):
+    def setUp(self):
+        for andar in (1, 2):
+            for corredor in 'AB':
+                for pos in range(1, 4):
+                    Endereco.objects.create(
+                        corredor=corredor, andar=andar, posicao=pos,
+                        codigo=Endereco.montar_codigo(corredor, andar, pos),
+                    )
+        Endereco.objects.filter(codigo=Endereco.montar_codigo('B', 2, 3)).update(ativo=False)
+
+    def _login(self, grupo):
+        u = User.objects.create_user(grupo.replace(' ', ''), password='x')
+        u.groups.add(Group.objects.get_or_create(name=grupo)[0])
+        self.client.force_login(u)
+
+    def test_visao_3d_renderiza(self):
+        self._login('Administradores')
+        r = self.client.get(reverse('estoque:mapa_estoque'), {'visao': '3d'}, secure=True)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'id="mapa3d"')
+        self.assertContains(r, 'three.module.min')
+
+    def test_dados_json(self):
+        self._login('Gestor Logística')
+        url = reverse('estoque:mapa_estoque_dados')
+        with self.assertNumQueries(5):  # sessão, usuário, grupo, endereços (com ocupação) e paletes
+            r = self.client.get(url, secure=True)
+        self.assertEqual(r.status_code, 200)
+        dados = r.json()
+        self.assertEqual(len(dados['enderecos']), 12)
+        estados = {e['c']: e['s'] for e in dados['enderecos']}
+        self.assertEqual(estados[Endereco.montar_codigo('B', 2, 3)], 'inativo')
+        self.assertEqual(estados[Endereco.montar_codigo('A', 1, 1)], 'livre')
+        r = self.client.get(url, {'andar': 1, 'corredor': 'A'}, secure=True)
+        self.assertEqual(len(r.json()['enderecos']), 3)
+
+    def test_dados_exige_perfil(self):
+        self._login('Operador Logística')
+        r = self.client.get(reverse('estoque:mapa_estoque_dados'), secure=True)
+        self.assertNotEqual(r.status_code, 200)
+
+
 class ConsultarPaleteTests(TestCase):
     def setUp(self):
         from datetime import date

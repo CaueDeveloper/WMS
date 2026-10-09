@@ -22,6 +22,8 @@
         {% include 'estoque/_mapa_corredores.html' %}
     {% elif visao == 'guardas' %}
         {% include 'estoque/_mapa_guardas.html' %}
+    {% elif visao == '3d' %}
+        {% include 'estoque/_mapa_3d.html' %}
     {% else %}
         {% include 'estoque/_mapa_andares.html' with codigo_completo=True %}
     {% endif %}
