@@ -117,23 +117,26 @@ class ReprovacaoTests(TestCase):
 
     def test_gestor_reprova_pela_planilha(self):
         self.client.force_login(_usuario('Gestor Produção'))
-        self.client.post(reverse('recebimento:transferencia_gestor'),
-                         {'reprovar_palete': self.p.barcode_palete}, secure=True)
+        r = self.client.post(reverse('recebimento:transferencia_gestor'),
+                             {'reprovar_palete': self.p.barcode_palete}, secure=True)
+        self.assertIn(f'flash=palete_erro:{self.p.barcode_palete}', r['Location'])
         self.p.refresh_from_db()
         self.assertEqual(self.p.estado, 'REPROVADO')
 
 
 class TransferenciaConfirmacaoTests(TestCase):
-    def test_bipagem_e_aprovacao_mostram_tela_cheia_e_confirmacao(self):
+    def test_bipagem_redireciona_com_animacao_na_linha_e_confirmacao(self):
         p = Palete.objects.create(sku='X', descricao='x', lote='L1', peso_kg=1, estado='CRIADO')
         self.client.force_login(User.objects.create_user('adm', password='x', is_superuser=True))
         url = reverse('recebimento:transferencia_gestor')
-        self.client.post(url, {'barcode_palete': p.barcode_palete}, secure=True)
+        r = self.client.post(url, {'barcode_palete': p.barcode_palete}, secure=True)
+        self.assertEqual(r['Location'], f'{url}?flash=palete_ok:{p.barcode_palete}')
         r = self.client.get(url, secure=True)
-        self.assertContains(r, 'id="sucesso-tela"')
+        self.assertNotContains(r, 'id="sucesso-tela"')
+        self.assertContains(r, 'data-linha-palete')
         self.assertContains(r, 'dlg-confirmar-lote')
         self.assertContains(r, 'data-confirmar-lote')
-        self.client.post(url, {'aprovar_lote': 'L1'}, secure=True)
+        r = self.client.post(url, {'aprovar_lote': 'L1'}, secure=True)
+        self.assertIn('flash=lote_ok:L1', r['Location'])
         r = self.client.get(url, secure=True)
-        self.assertContains(r, 'id="sucesso-tela"')
-        self.assertContains(r, 'Lote L1 aprovado')
+        self.assertNotContains(r, 'id="sucesso-tela"')

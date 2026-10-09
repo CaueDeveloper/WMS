@@ -10,6 +10,10 @@ class EnderecoAdmin(admin.ModelAdmin):
     search_fields = ('codigo',)
     ordering = ('corredor', 'andar', 'posicao')
 
+    def get_readonly_fields(self, request, obj=None):
+        # O código é derivado de corredor/andar/posição: editar um sem o outro os desacopla.
+        return ('codigo', 'corredor', 'andar', 'posicao') if obj else ()
+
 
 @admin.register(AreaDestino)
 class AreaDestinoAdmin(admin.ModelAdmin):

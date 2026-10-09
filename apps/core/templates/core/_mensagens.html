@@ -10,7 +10,7 @@
 </div>
 {% for mensagem in messages %}
     {% if 'tela_cheia' in mensagem.extra_tags %}
-    {% if 'tela_erro' in mensagem.extra_tags %}{% include 'core/_sucesso_tela.html' with texto=mensagem.message rapida=True erro=True %}{% elif 'tela_rapida' in mensagem.extra_tags %}{% include 'core/_sucesso_tela.html' with texto=mensagem.message rapida=True %}{% else %}{% include 'core/_sucesso_tela.html' with texto=mensagem.message %}{% endif %}
+    {% if 'tela_erro' in mensagem.extra_tags %}{% include 'core/_sucesso_tela.html' with texto=mensagem.message erro=True %}{% elif 'tela_rapida' in mensagem.extra_tags %}{% include 'core/_sucesso_tela.html' with texto=mensagem.message rapida=True %}{% else %}{% include 'core/_sucesso_tela.html' with texto=mensagem.message %}{% endif %}
     {% endif %}
 {% endfor %}
 {% endif %}

@@ -1,3 +1,4 @@
+import re
 from decimal import Decimal
 
 from django import forms
@@ -9,6 +10,9 @@ from .models import Palete
 
 ESTADOS_LOTE_EM_PRODUCAO = ('CRIADO', 'EM_TRANSFERENCIA', 'REPROVADO')
 
+
+# Lote vai para a etiqueta ZPL e para a querystring: só caracteres seguros.
+LOTE_VALIDO = re.compile(r'^[A-Z0-9][A-Z0-9._/-]*$')
 
 _CLASSE_CAMPO = 'input-field input-field-lg'
 
@@ -61,6 +65,8 @@ class RecebimentoForm(forms.Form):
 
     def clean_lote(self):
         lote = self.cleaned_data['lote'].strip().upper()
+        if not LOTE_VALIDO.match(lote):
+            raise forms.ValidationError('Use apenas letras (sem acento), números e os símbolos . _ / -')
         ja_aprovado = Palete.objects.filter(lote=lote).exclude(estado__in=ESTADOS_LOTE_EM_PRODUCAO).exists()
         if ja_aprovado:
             raise forms.ValidationError(

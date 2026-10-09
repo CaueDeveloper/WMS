@@ -89,7 +89,7 @@ class TransferenciaTests(TestCase):
         self.assertContains(r, '<span class="badge-success">Confirmado</span>', count=1)
         self.assertContains(r, '<span class="badge-warning">Pendente</span>', count=1)
         self.assertContains(r, '<option value="reprovar">Reprovar</option>', count=2)
-        self.assertContains(r, '<option value="aprovar">Aprovar</option>', count=1)  # só o palete ainda não aprovado
+        self.assertNotContains(r, '<option value="aprovar">')  # a aprovação do palete é a bipagem
         self.assertContains(r, 'disabled')  # lote incompleto: aprovar fica desabilitado
 
     def test_logistica_usa_o_mesmo_modelo(self):

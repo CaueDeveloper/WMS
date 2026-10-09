@@ -3,7 +3,6 @@
 
 {% block title %}Consultar — WMS{% endblock %}
 {% block titulo_pagina %}Consultar Palete{% endblock %}
-{% block nav_ativo_consultar %}{% if not modo %}nav-link-ativo{% endif %}{% endblock %}
 
 {% block shell_content %}
 {% if not modo %}
@@ -44,8 +43,8 @@
             </ul>
         </div>
 
-        {% if palete.estado == 'ARMAZENADO' %}
-            <form method="post" autocomplete="off" class="mb-4">
+        {% if palete.estado == 'ARMAZENADO' and pode_retirar %}
+            <form method="post" autocomplete="off" class="mb-4" onsubmit="return confirm('Retirar o palete do mapa? A saída física não pode ser desfeita.');">
                 {% csrf_token %}
                 <input type="hidden" name="barcode_palete" value="{{ palete.barcode_palete }}">
                 <input type="hidden" name="retirar" value="1">
@@ -149,13 +148,13 @@
                         <td>{{ p.lote }}</td>
                         <td>{{ p.data_fabricacao_exibida|date:"d/m/Y" }}</td>
                         <td>
-                            <form method="post" autocomplete="off">
+                            {% if pode_retirar %}<form method="post" autocomplete="off" onsubmit="return confirm('Retirar o palete do mapa? A saída física não pode ser desfeita.');">
                                 {% csrf_token %}
                                 <input type="hidden" name="barcode_palete" value="{{ p.barcode_palete }}">
                                 <input type="hidden" name="codigo_endereco" value="{{ endereco.codigo }}">
                                 <input type="hidden" name="retirar" value="1">
                                 <button type="submit" class="btn-danger rounded px-3 py-1.5 text-xs font-medium">Retirar</button>
-                            </form>
+                            </form>{% endif %}
                         </td>
                     </tr>
                     {% endfor %}

@@ -2,6 +2,17 @@
 
 > Este arquivo orienta o Claude Code neste repositório. A fonte única de verdade de requisitos é [docs/PRD.md](docs/PRD.md); veja também [docs/escopo.md](docs/escopo.md). Em caso de conflito, o PRD prevalece.
 
+## Estado atual do código (prevalece sobre o texto abaixo e sobre o PRD onde houver conflito)
+
+- **Endereços:** 1260 posições = corredor A–T × andar 1–3 × posição 1–21, capacidade 1, código `001-02-A-01-01`. Não existe `ocupacao_atual`: a ocupação é contada pelos paletes ARMAZENADO (`EnderecoQuerySet.com_ocupacao`). No SQLite/PostgreSQL há `UniqueConstraint` condicional (um ARMAZENADO por endereço); no MySQL vale o `select_for_update` de `alocar_lote`.
+- **Estados do palete:** CRIADO → EM_TRANSFERENCIA → CONFERIDO → EM_CONFERENCIA_LOGISTICA → CONFERIDO_LOGISTICA → ARMAZENADO → RETIRADO; REPROVADO (qualquer etapa, volta a CRIADO via `corrigir_palete`). `FINALIZADO` não é produzido por nenhum fluxo.
+- **Reautenticação por senha do Gestor / Outbox SAP / romaneio:** não implementados no código atual — o texto abaixo que os descreve está desatualizado até decisão do time.
+- **Permissões:** transferência Produção — Operador bipa, Gestor aprova/corrige, ambos reprovam; Logística — Operador bipa, Gestor aprova, ambos reprovam. Put-away/plano: Operador Logística. Retirar palete do mapa: Operador Logística/Administradores. Estatísticas: Administradores e Gestores.
+- **Reimpressão:** `corrigir_palete` marca `palete.reimprimir_etiqueta` quando peso ou data de fabricação mudam; a view reimprime em `on_commit`. Checkbox "Peso diferente de 500 kg" é intencional (vale para qualquer produto).
+- **Lote:** apenas `A-Z 0-9 . _ / -` (vai para ZPL e querystring). Impressão é disparada em `transaction.on_commit`.
+- **Admin:** Palete e PaleteHistorico são somente leitura; mudanças de estado só pelo fluxo da aplicação.
+- **Testes:** `python manage.py test` (suítes de Put-away, recebimento, acesso em `tests_*.py`). Os nomes de suítes citados nas notas M* abaixo (ex.: `AlocarLoteConcorrenciaTests`) não existem mais.
+
 ## Visão Geral
 
 Sistema de controle de estoque por lote para a transição entre Produção e Logística da Café do Sítio. Camada de controle intermediária (entrada, armazenagem com mapa visual, separação por romaneio) — **não substitui o SAP B1**, que segue como fonte única de saldo.
@@ -12,9 +23,9 @@ Sistema de controle de estoque por lote para a transição entre Produção e Lo
 - **Banco:** SQLite3 em desenvolvimento, MySQL em produção — troca ocorre apenas no bloco `DATABASES` de `wms/settings.py`
 - **Frontend:** Views Django tradicionais, HTML5 + CSS3 puro (sem SPA). Layout otimizado para o pior caso: coletor Zebra MC2700 (4", 800×480)
 - **Impressão:** Zebra ZT421 via ZPL bruto, socket TCP/IP porta `9100`
-- **Notificação:** Z-API (WhatsApp Business API) via HTTP (`urllib`, sem dependências externas), thread daemon fire-and-forget — mesmo padrão de resiliência da impressão
+- **Notificação:** integração Z-API/WhatsApp **removida** (PRD D8); não há `whatsapp.py`
 - **Coleta:** Zebra DataWedge em modo emulação de teclado (o scanner dispara `Enter` automático — os formulários devem oferecer bipagem contínua com `autofocus`)
-- **Auth:** Django Auth nativo com `auth.Group` (`Administradores`, `Gestores`, `Operadores`) e `@permission_required`/mixins
+- **Auth:** LDAP/AD (`django-auth-ldap`) sobre Django Auth; 5 `auth.Group` (`Administradores`, `Operador Produção`, `Gestor Produção`, `Operador Logística`, `Gestor Logística`) e o decorator `apps.core.decorators.group_required`
 
 ## Regras de Negócio Invioláveis `[INVARIANTE]`
 

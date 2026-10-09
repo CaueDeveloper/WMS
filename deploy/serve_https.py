@@ -16,7 +16,6 @@ Exemplo:
 import sys
 from pathlib import Path
 
-from cheroot.server import HTTPServer
 from cheroot.ssl.builtin import BuiltinSSLAdapter
 from cheroot.wsgi import Server as WSGIServer
 

@@ -1,6 +1,8 @@
+from collections import Counter
+
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.db.models import Count, F, Q
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.dateparse import parse_date
@@ -106,9 +108,13 @@ def _maior_vaga_disponivel():
     pendente for maior que isso, ele não cabe inteiro em lugar nenhum — é o
     gatilho da armazenagem parcial do Put-away (ver `alocar_lote`,
     `permitir_parcial`)."""
-    livres = Endereco.objects.filter(ativo=True).com_ocupacao().filter(ocupacao__lt=F('capacidade'))
-    grupos = livres.values('corredor', 'andar').annotate(vagas=Count('pk'))
-    return max((g['vagas'] for g in grupos), default=0)
+    # A ocupação precisa ser avaliada por posição ANTES de agrupar: filtrar
+    # `ocupacao__lt` e agrupar na mesma query vira um HAVING por grupo.
+    vagas = Counter()
+    for e in Endereco.objects.filter(ativo=True).com_ocupacao():
+        if e.ocupacao < e.capacidade:
+            vagas[(e.corredor, e.andar)] += 1
+    return max(vagas.values(), default=0)
 
 
 def _redirect_com_lote(lote, andar=None):
@@ -299,6 +305,9 @@ def _buscar_armazenamento_do_palete(request, barcode):
         return None
 
     endereco = palete.endereco
+    if endereco is None:
+        messages.error(request, f'Palete {palete.barcode_palete} está armazenado, mas sem endereço registrado.')
+        return None
     return {
         'endereco': endereco,
         'quantidade': 1,
@@ -618,6 +627,10 @@ def _buscar_paletes_por_criterios(request, lote, sku, data_fabricacao_str):
     return resultados
 
 
+def _pode_retirar(user):
+    return user.is_superuser or user.groups.filter(name__in=('Administradores', 'Operador Logística')).exists()
+
+
 @group_required('Administradores', 'Operador Produção', 'Operador Logística', 'Gestor Produção', 'Gestor Logística')
 def consultar_palete(request):
     def _linha_do_tempo(palete):
@@ -641,6 +654,9 @@ def consultar_palete(request):
 
         if 'retirar' in request.POST:
             palete = _buscar_palete(request, barcode)
+            if not _pode_retirar(request.user):
+                messages.error(request, 'Apenas a Logística pode retirar paletes do mapa.')
+                palete = None
             if palete is not None and _exigir_armazenado(request, palete):
                 try:
                     retirar_palete_do_mapa(palete, usuario=request.user)
@@ -667,6 +683,7 @@ def consultar_palete(request):
         if barcode:
             palete = _buscar_palete(request, barcode)
         return render(request, 'estoque/consultar_palete.html', {
+            'pode_retirar': _pode_retirar(request.user),
             'modo': 'palete',
             'barcode': barcode,
             'palete': palete,
@@ -685,6 +702,7 @@ def consultar_palete(request):
                 paginator = Paginator(paletes, ITENS_POR_PAGINA_BUSCA)
                 resultados = paginator.get_page(request.GET.get('pg'))
         return render(request, 'estoque/consultar_palete.html', {
+            'pode_retirar': _pode_retirar(request.user),
             'modo': 'lote',
             'resultados': resultados,
             'lote': lote,
@@ -705,6 +723,7 @@ def consultar_palete(request):
 
         endereco, paletes = _buscar_paletes_por_endereco(request, codigo_endereco)
         return render(request, 'estoque/consultar_palete.html', {
+            'pode_retirar': _pode_retirar(request.user),
             'modo': 'endereco',
             'codigo_endereco': codigo_endereco,
             'endereco': endereco,
@@ -719,7 +738,8 @@ def consultar_palete(request):
             'filtro_submetido': filtro_submetido,
         })
 
-    return render(request, 'estoque/consultar_palete.html', {'modo': None})
+    return render(request, 'estoque/consultar_palete.html', {
+            'pode_retirar': _pode_retirar(request.user),'modo': None})
 
 
 @group_required('Administradores', 'Gestor Produção', 'Gestor Logística')

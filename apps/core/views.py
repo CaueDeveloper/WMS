@@ -59,7 +59,11 @@ def home(request):
         'hoje': f'{DIAS_SEMANA[hoje.weekday()].capitalize()}, {hoje.day} de {MESES[hoje.month - 1]}',
         'etapas': etapas,
         'atalhos': [item for item in permitidos if item.view_name != 'home' and item.descricao],
-        'recentes': PaleteHistorico.objects.select_related('palete', 'usuario').order_by('-criado_em')[:MOVIMENTACOES_RECENTES],
+        # Usuário do AD ainda sem perfil não vê movimentações (barcodes, nomes).
+        'recentes': (
+            PaleteHistorico.objects.select_related('palete', 'usuario').order_by('-criado_em')[:MOVIMENTACOES_RECENTES]
+            if request.user.is_superuser or request.user.groups.exists() else []
+        ),
     })
 
 
@@ -311,7 +315,7 @@ def _totais_lotes_aprovados(estado):
     return lotes, peso
 
 
-@login_required
+@group_required('Administradores', 'Gestor Produção', 'Gestor Logística')
 def estatisticas(request):
     pode_ver_producao = request.user.is_superuser or request.user.groups.filter(
         name__in=['Administradores', 'Gestor Produção']

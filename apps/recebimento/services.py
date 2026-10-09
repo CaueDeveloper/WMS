@@ -22,6 +22,15 @@ ESTADOS_REPROVAVEIS = {
 }
 
 
+def _bloquear_se_ha_pendentes_na_producao(lote):
+    n = Palete.objects.filter(lote=lote, estado__in=('CRIADO', 'EM_TRANSFERENCIA')).count()
+    if n:
+        raise LoteIncompletoError(
+            f'O lote {lote} tem {n} palete(s) ainda em andamento na Produção (corrigido/reprovado) — '
+            'aguarde a aprovação deles antes de aprovar o lote na Logística.'
+        )
+
+
 def _bloquear_se_ha_reprovados(lote):
     n = Palete.objects.filter(lote=lote, estado='REPROVADO').count()
     if n:
@@ -58,13 +67,19 @@ def corrigir_palete(palete_id, produto, peso_kg, data_fabricacao=None, usuario=N
     palete = Palete.objects.select_for_update().filter(pk=palete_id).first()
     if palete is None or palete.estado != 'REPROVADO':
         raise PaleteStateError('Este palete não está mais aguardando correção.')
+    # A etiqueta impressa mostra peso e data de fabricação: se mudarem, a
+    # view deve reimprimir (palete.reimprimir_etiqueta).
+    nova_data = data_fabricacao or palete.data_fabricacao
+    palete.reimprimir_etiqueta = (palete.peso_kg != peso_kg) or (palete.data_fabricacao != nova_data)
     palete.sku = produto.sku
     palete.descricao = produto.descricao
     palete.peso_kg = peso_kg
-    if data_fabricacao:
-        palete.data_fabricacao = data_fabricacao
+    palete.data_fabricacao = nova_data
     palete.estado = 'CRIADO'
     palete.aprovado_producao_em = None
+    palete.reprovado_em = None
+    palete.motivo_reprovacao = ''
+    palete.reprovado_na_etapa = ''
     palete.save()
     registrar_historico([palete], 'CRIADO', usuario=usuario)
     return palete
@@ -129,6 +144,7 @@ def aprovar_lote_logistica(lote, usuario=None):
     if not paletes_do_lote:
         raise LoteVazioError(f'Nenhum palete pendente de conferência da logística para o lote {lote}.')
     _bloquear_se_ha_reprovados(lote)
+    _bloquear_se_ha_pendentes_na_producao(lote)
 
     pendentes_bipagem = [p for p in paletes_do_lote if p.estado == 'CONFERIDO']
     if pendentes_bipagem:

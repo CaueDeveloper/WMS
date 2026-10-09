@@ -127,7 +127,7 @@ LOGOUT_REDIRECT_URL = 'login'
 # [ASSUMPTION] host de desenvolvimento provisório até existir um cadastro de equipamentos.
 # Valores hardcoded abaixo são só o fallback de dev — configuráveis via .env (ver .env.example).
 IMPRESSORA_ZPL_HOST = os.environ.get('IMPRESSORA_ZPL_HOST')
-IMPRESSORA_ZPL_PORT = int(os.environ.get('IMPRESSORA_ZPL_PORT'))
+IMPRESSORA_ZPL_PORT = int(os.environ.get('IMPRESSORA_ZPL_PORT') or 9100)
 
 
 # LDAP/Active Directory — autenticação corporativa via django-auth-ldap.
@@ -290,7 +290,7 @@ if 'test' in sys.argv:
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'pt-br'
 
 TIME_ZONE = 'America/Sao_Paulo'
 

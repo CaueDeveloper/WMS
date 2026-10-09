@@ -1,9 +1,11 @@
 import itertools
 from datetime import date
 from decimal import Decimal
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -42,9 +44,13 @@ def receber_palete(request):
                 )
                 for _ in range(quantidade)
             ]
-            Palete.objects.bulk_create(paletes)  # estado permanece CRIADO
-            registrar_historico(paletes, 'CRIADO', usuario=request.user)
-            disparar_impressao_async(paletes)
+            # save() por palete (e não bulk_create): no MySQL o bulk_create não
+            # devolve as PKs, e o histórico precisa delas. Tudo na mesma transação.
+            with transaction.atomic():
+                for palete in paletes:
+                    palete.save()  # estado permanece CRIADO
+                registrar_historico(paletes, 'CRIADO', usuario=request.user)
+                transaction.on_commit(lambda: disparar_impressao_async(paletes))
             if quantidade == 1:
                 messages.success(
                     request,
@@ -73,54 +79,43 @@ def receber_palete(request):
     })
 
 
-def _bipar_para_transferencia(request, barcode):
-    """Busca Palete pelo barcode_palete e transiciona CRIADO -> EM_TRANSFERENCIA.
+def _bipar(request, barcode, estado_atual, estado_novo, motivo_recusa):
+    """Busca o Palete pelo barcode_palete e transiciona `estado_atual` -> `estado_novo`.
+    A linha é travada (select_for_update) para que bipagens concorrentes, ou uma
+    reprovação simultânea, não sobrescrevam umas às outras nem dupliquem o histórico.
     Em qualquer falha grava messages.error(...) e devolve None."""
     barcode = (barcode or '').strip()
     if not barcode:
         messages.error(request, 'Bipe ou digite o código do palete.')
         return None
-    palete = Palete.objects.filter(barcode_palete=barcode).first()
-    if palete is None:
-        messages.error(request, f'Palete "{barcode}" não encontrado. Confira o código e bipe novamente.')
-        return None
-    if palete.estado != 'CRIADO':
-        messages.error(
-            request,
-            f'Palete {palete.barcode_palete} está "{palete.get_estado_display()}" — '
-            'não pode ser bipado para transferência agora.',
-        )
-        return None
-    palete.estado = 'EM_TRANSFERENCIA'
-    palete.save(update_fields=['estado', 'atualizado_em'])
-    registrar_historico([palete], 'EM_TRANSFERENCIA', usuario=request.user)
-    messages.success(request, f'Palete {palete.barcode_palete} (lote {palete.lote}) bipado para transferência.', extra_tags='tela_cheia tela_rapida')
+    with transaction.atomic():
+        palete = Palete.objects.select_for_update().filter(barcode_palete=barcode).first()
+        if palete is None:
+            messages.error(request, f'Palete "{barcode}" não encontrado. Confira o código e bipe novamente.')
+            return None
+        if palete.estado != estado_atual:
+            messages.error(
+                request,
+                f'Palete {palete.barcode_palete} está "{palete.get_estado_display()}" — {motivo_recusa}',
+            )
+            return None
+        palete.estado = estado_novo
+        palete.save(update_fields=['estado', 'atualizado_em'])
+        registrar_historico([palete], estado_novo, usuario=request.user)
     return palete
+
+
+def _bipar_para_transferencia(request, barcode):
+    """CRIADO -> EM_TRANSFERENCIA."""
+    return _bipar(request, barcode, 'CRIADO', 'EM_TRANSFERENCIA', 'não pode ser bipado para transferência agora.')
 
 
 def _bipar_para_confirmacao_logistica(request, barcode):
-    """Busca Palete pelo barcode_palete e transiciona CONFERIDO -> EM_CONFERENCIA_LOGISTICA.
-    Em qualquer falha grava messages.error(...) e devolve None."""
-    barcode = (barcode or '').strip()
-    if not barcode:
-        messages.error(request, 'Bipe ou digite o código do palete.')
-        return None
-    palete = Palete.objects.filter(barcode_palete=barcode).first()
-    if palete is None:
-        messages.error(request, f'Palete "{barcode}" não encontrado. Confira o código e bipe novamente.')
-        return None
-    if palete.estado != 'CONFERIDO':
-        messages.error(
-            request,
-            f'Palete {palete.barcode_palete} está "{palete.get_estado_display()}" — '
-            'não pode ser bipado para conferência da logística agora.',
-        )
-        return None
-    palete.estado = 'EM_CONFERENCIA_LOGISTICA'
-    palete.save(update_fields=['estado', 'atualizado_em'])
-    registrar_historico([palete], 'EM_CONFERENCIA_LOGISTICA', usuario=request.user)
-    messages.success(request, f'Palete {palete.barcode_palete} (lote {palete.lote}) bipado para conferência da logística.', extra_tags='tela_cheia tela_rapida')
-    return palete
+    """CONFERIDO -> EM_CONFERENCIA_LOGISTICA."""
+    return _bipar(
+        request, barcode, 'CONFERIDO', 'EM_CONFERENCIA_LOGISTICA',
+        'não pode ser bipado para conferência da logística agora.',
+    )
 
 
 def _agrupar_por_lote(paletes_ordenados_por_lote):
@@ -156,19 +151,28 @@ def _usuario_em_grupo(user, *nomes_grupo):
 
 
 def _reprovar(request, etapa):
+    """Reprova o palete; devolve-o em caso de sucesso (o aviso é a animação na linha dele)."""
     try:
-        palete = reprovar_palete(
+        return reprovar_palete(
             request.POST.get('reprovar_palete'), etapa,
             usuario=request.user, motivo=request.POST.get('motivo'),
         )
     except PaleteStateError as exc:
         messages.error(request, str(exc))
-    else:
-        messages.warning(
-            request,
-            f'Palete {palete.barcode_palete} (lote {palete.lote}) reprovado — enviado ao Gestor para correção.',
-            extra_tags='tela_cheia tela_rapida tela_erro',
-        )
+        return None
+
+
+def _redirect_flash(nome_url, flash):
+    """Volta para a tela de transferência; `flash` ('tipo:chave') faz a linha animar."""
+    url = reverse(nome_url)
+    return redirect(f'{url}?{urlencode({"flash": flash}, safe=":")}' if flash else url)
+
+
+def _pk_ou_none(valor):
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return None
 
 
 def _corrigir(request):
@@ -180,17 +184,18 @@ def _corrigir(request):
         return
     try:
         palete = corrigir_palete(
-            request.POST.get('corrigir_palete'),
+            _pk_ou_none(request.POST.get('corrigir_palete')),
             form.cleaned_data['produto'], form.cleaned_data['peso_kg'],
             form.cleaned_data['data_fabricacao'], usuario=request.user,
         )
     except PaleteStateError as exc:
         messages.error(request, str(exc))
     else:
-        messages.success(
-            request,
-            f'Palete {palete.barcode_palete} corrigido — bipe-o novamente para confirmar.',
-        )
+        aviso = f'Palete {palete.barcode_palete} corrigido — bipe-o novamente para confirmar.'
+        if palete.reimprimir_etiqueta:
+            transaction.on_commit(lambda: disparar_impressao_async([palete]))
+            aviso += ' Nova etiqueta enviada para impressão — substitua a anterior.'
+        messages.success(request, aviso)
 
 
 def _parse_data_relatorio(valor):
@@ -208,9 +213,9 @@ def _lotes_aprovados_na_data(campo_aprovado, data):
     """Lista os lotes com pelo menos um palete aprovado (campo `campo_aprovado`
     preenchido) na `data` informada — usada para popular os checkboxes de
     geração de relatório na tela de Transferência."""
-    return list(
+    return sorted(
         Palete.objects.filter(**{f'{campo_aprovado}__date': data})
-        .order_by('-' + campo_aprovado)
+        .order_by()
         .values_list('lote', flat=True)
         .distinct()
     )
@@ -222,24 +227,23 @@ def transferencia_gestor(request):
     pode_aprovar = _usuario_em_grupo(request.user, 'Administradores', 'Gestor Produção')
 
     if request.method == 'POST':
+        flash = None
         if 'barcode_palete' in request.POST and (pode_bipar or pode_aprovar):
-            _bipar_para_transferencia(request, request.POST.get('barcode_palete'))
+            palete = _bipar_para_transferencia(request, request.POST.get('barcode_palete'))
+            flash = f'palete_ok:{palete.barcode_palete}' if palete else None
         elif 'reprovar_palete' in request.POST and (pode_bipar or pode_aprovar):
-            _reprovar(request, 'PRODUCAO')
+            palete = _reprovar(request, 'PRODUCAO')
+            flash = f'palete_erro:{palete.barcode_palete}' if palete else None
         elif 'corrigir_palete' in request.POST and pode_aprovar:
             _corrigir(request)
         elif 'aprovar_lote' in request.POST and pode_aprovar:
             lote = request.POST.get('aprovar_lote')
             try:
-                paletes = aprovar_lote(lote, usuario=request.user)
+                aprovar_lote(lote, usuario=request.user)
             except (LoteVazioError, LoteIncompletoError) as exc:
                 messages.error(request, str(exc))
             else:
-                messages.success(
-                    request,
-                    f'Lote {lote} aprovado ({len(paletes)} palete(s)).',
-                    extra_tags='tela_cheia',
-                )
+                flash = f'lote_ok:{lote}'
         elif 'gerar_relatorio' in request.POST and pode_aprovar:
             lotes_selecionados = request.POST.getlist('lote_relatorio')
             if not lotes_selecionados:
@@ -248,7 +252,7 @@ def transferencia_gestor(request):
                 url_relatorio = reverse('recebimento:relatorio_aprovacao_producao') + \
                     '?lotes=' + ','.join(lotes_selecionados)
                 return redirect(url_relatorio)
-        return redirect('recebimento:transferencia_gestor')
+        return _redirect_flash('recebimento:transferencia_gestor', flash)
 
     pendentes = Palete.objects.filter(
         estado__in=['CRIADO', 'EM_TRANSFERENCIA', 'REPROVADO'],
@@ -274,23 +278,21 @@ def transferencia_logistica(request):
     pode_aprovar = _usuario_em_grupo(request.user, 'Administradores', 'Gestor Logística')
 
     if request.method == 'POST':
+        flash = None
         if 'barcode_palete' in request.POST and pode_bipar:
-            _bipar_para_confirmacao_logistica(request, request.POST.get('barcode_palete'))
-        elif 'reprovar_palete' in request.POST and pode_bipar:
-            _reprovar(request, 'LOGISTICA')
+            palete = _bipar_para_confirmacao_logistica(request, request.POST.get('barcode_palete'))
+            flash = f'palete_ok:{palete.barcode_palete}' if palete else None
+        elif 'reprovar_palete' in request.POST and (pode_bipar or pode_aprovar):
+            palete = _reprovar(request, 'LOGISTICA')
+            flash = f'palete_erro:{palete.barcode_palete}' if palete else None
         elif 'aprovar_lote' in request.POST and pode_aprovar:
             lote = request.POST.get('aprovar_lote')
             try:
-                paletes = aprovar_lote_logistica(lote, usuario=request.user)
+                aprovar_lote_logistica(lote, usuario=request.user)
             except (LoteVazioError, LoteIncompletoError) as exc:
                 messages.error(request, str(exc))
             else:
-                messages.success(
-                    request,
-                    f'Lote {lote} confirmado pela logística ({len(paletes)} palete(s)). '
-                    'Liberado(s) para o Mapa de Estoque e put-away.',
-                    extra_tags='tela_cheia',
-                )
+                flash = f'lote_ok:{lote}'
         elif 'gerar_relatorio' in request.POST and pode_aprovar:
             lotes_selecionados = request.POST.getlist('lote_relatorio')
             if not lotes_selecionados:
@@ -299,7 +301,7 @@ def transferencia_logistica(request):
                 url_relatorio = reverse('recebimento:relatorio_aprovacao_logistica') + \
                     '?lotes=' + ','.join(lotes_selecionados)
                 return redirect(url_relatorio)
-        return redirect('recebimento:transferencia_logistica')
+        return _redirect_flash('recebimento:transferencia_logistica', flash)
 
     pendentes = Palete.objects.filter(
         estado__in=['CONFERIDO', 'EM_CONFERENCIA_LOGISTICA'],
@@ -310,7 +312,7 @@ def transferencia_logistica(request):
     data_relatorio = _parse_data_relatorio(request.GET.get('data_relatorio'))
     return render(request, 'recebimento/transferencia_logistica.html', {
         'grupos': grupos_pagina,
-        'pode_reprovar': pode_bipar,
+        'pode_reprovar': pode_bipar or pode_aprovar,
         'pode_bipar': pode_bipar,
         'pode_aprovar': pode_aprovar,
         'data_relatorio': data_relatorio,

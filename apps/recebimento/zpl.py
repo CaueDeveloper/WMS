@@ -19,7 +19,7 @@ CAMINHO_TEMPLATE_PALETE = Path(__file__).parent / 'templates_zpl' / 'etiqueta_pa
 
 def montar_zpl_etiqueta(palete):
     # Formatado manualmente (DD/MM/AAAA HH:MM) em vez de django.utils.formats:
-    # LANGUAGE_CODE do projeto é 'en-us', mas todo o texto da aplicação é pt-BR.
+    # mantém a formatação independente do idioma configurado.
     impresso_em = timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M')
     data_impressao, hora_impressao = impresso_em.split(' ')
     # [[DATA]] é o campo "Data de Fabricação" da etiqueta; paletes antigos (sem
@@ -48,6 +48,9 @@ def montar_zpl_etiquetas(paletes):
 def enviar_zpl(zpl, host=None, port=None, timeout=5):
     host = host or settings.IMPRESSORA_ZPL_HOST
     port = port or settings.IMPRESSORA_ZPL_PORT
+    if not host or not port:
+        logger.error('Impressora ZPL não configurada (IMPRESSORA_ZPL_HOST/PORT); etiqueta não enviada.')
+        return
     dados = zpl.encode('utf-8') if isinstance(zpl, str) else zpl
     try:
         with socket.create_connection((host, port), timeout=timeout) as sock:

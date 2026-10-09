@@ -68,10 +68,6 @@ ITENS_MENU = (
         descricao='Todos os paletes de um lote.', modo='lote',
     ),
     ItemMenu(
-        'Consultar endereço', 'search', 'estoque:consultar_palete', TODOS_OPERACIONAIS, secao='Consulta',
-        descricao='O que há guardado em um endereço.', modo='endereco',
-    ),
-    ItemMenu(
         'Estatísticas', 'chart-bar', 'estatisticas', (ADM, GESTOR_PROD, GESTOR_LOG), secao='Consulta',
         descricao='Volumes e produtividade por período.',
     ),

@@ -19,7 +19,7 @@ class Palete(models.Model):
         ('ARMAZENADO', 'Armazenado no Endereço'),
         ('FINALIZADO', 'Movimentação Sincronizada no SAP'),
         ('RETIRADO', 'Retirado do Mapa — Saída Física do Estoque'),
-        ('REPROVADO', 'Reprovado pelo Operador — Aguardando Correção do Gestor'),
+        ('REPROVADO', 'Reprovado — Aguardando Correção do Gestor'),
     ]
 
     barcode_palete = models.CharField(max_length=50, unique=True, default=gerar_barcode_palete)
@@ -31,7 +31,7 @@ class Palete(models.Model):
     data_fabricacao = models.DateField(null=True, blank=True)
     estado = models.CharField(max_length=25, choices=STATUS_CHOICES, default='CRIADO')
     area_destino = models.ForeignKey('estoque.AreaDestino', on_delete=models.SET_NULL, null=True, blank=True)
-    endereco = models.ForeignKey('estoque.Endereco', on_delete=models.SET_NULL, null=True, blank=True)
+    endereco = models.ForeignKey('estoque.Endereco', on_delete=models.PROTECT, null=True, blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
     aprovado_producao_em = models.DateTimeField(null=True, blank=True)
@@ -46,6 +46,14 @@ class Palete(models.Model):
     class Meta:
         indexes = [
             models.Index(fields=['estado', 'lote'], name='palete_estado_lote_idx'),
+        ]
+        constraints = [
+            # Capacidade 1 por posição, garantida no banco (ignorada no MySQL,
+            # que não suporta índice único condicional — lá vale o lock em alocar_lote).
+            models.UniqueConstraint(
+                fields=['endereco'], condition=models.Q(estado='ARMAZENADO'),
+                name='palete_um_armazenado_por_endereco',
+            ),
         ]
 
     def __str__(self):

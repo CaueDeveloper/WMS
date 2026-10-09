@@ -3,6 +3,7 @@ from django.db.models import Count
 from django.utils import timezone
 
 from apps.recebimento.models import Palete, registrar_historico
+from apps.recebimento.services import LoteVazioError  # noqa: F401 (reexportado para as views)
 
 from .models import Endereco
 
@@ -12,10 +13,6 @@ class EnderecoCheioError(Exception):
 
 
 class PaleteNaoArmazenadoError(Exception):
-    pass
-
-
-class LoteVazioError(Exception):
     pass
 
 

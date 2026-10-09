@@ -1,4 +1,4 @@
-{% comment %}Aviso de sucesso em tela cheia (fundo verde + check). Uso: include com `texto`; `erro=True` gera a variante vermelha (X) usada na reprovação; `rapida=True` fecha em 1,5 s. Estilos inline de propósito.{% endcomment %}
+{% comment %}Aviso de sucesso em tela cheia (fundo verde + check). Uso: include com `texto`; `erro=True` gera a variante vermelha (X) usada na reprovação; fica fixa até o usuário clicar em OK (não fecha sozinha, nem por Esc ou clique no fundo). Estilos inline de propósito.{% endcomment %}
 <style>
 #sucesso-tela { animation: sucesso-fade .35s ease-out both; }
 #sucesso-tela.saindo { animation: sucesso-fade-out .3s ease-in both; }
@@ -41,9 +41,7 @@
         var barcode = document.getElementById('id_barcode_palete');
         if (barcode) barcode.focus();
     }
-    tela.addEventListener('click', fechar);
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') fechar(); });
-    setTimeout(fechar, {% if rapida %}1500{% else %}4000{% endif %});
-    {% if not rapida %}ok.focus();{% endif %}
+    tela.addEventListener('click', function (e) { if (e.target === ok) fechar(); });
+    ok.focus();
 })();
 </script>
