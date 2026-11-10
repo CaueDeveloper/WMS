@@ -1,0 +1,3 @@
+{# Selo de status do palete. Uso: include com `palete`. O texto vem no selo (não depende só da cor); o rótulo completo fica no title. #}
+{% load core_extras %}
+<span class="{{ palete.estado|estado_badge }}" title="{{ palete.get_estado_display }}">{{ palete.estado|estado_curto }}</span>

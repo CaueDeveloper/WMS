@@ -4,7 +4,7 @@
     {% for mensagem in messages %}
         {% if 'tela_cheia' not in mensagem.extra_tags %}
         <p role="{% if mensagem.level_tag == 'error' %}alert{% else %}status{% endif %}"
-           class="{% if mensagem.level_tag == 'error' %}alert-error{% elif mensagem.level_tag == 'warning' %}alert-warning{% else %}alert-success{% endif %} !mb-0 text-base lg:text-sm">{{ mensagem }}</p>
+           class="{% if mensagem.level_tag == 'error' %}alert-error{% elif mensagem.level_tag == 'warning' %}alert-warning{% else %}alert-success{% endif %} !mb-0 texto-coletor">{{ mensagem }}</p>
         {% endif %}
     {% endfor %}
 </div>

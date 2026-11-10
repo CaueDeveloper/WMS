@@ -1,7 +1,0 @@
-<label class="flex flex-col">
-    <span class="mb-1 text-sm font-semibold text-slate-700">{{ titulo }}</span>
-    <select name="{{ nome }}"{% if auto %} onchange="this.form.submit()"{% endif %}
-            class="min-h-11 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-800 transition-colors duration-150 hover:border-slate-400{% if modo == 'complexo' %} min-h-10{% endif %}">
-        {% for o in opcoes %}<option value="{{ o.valor }}"{% if o.ativo %} selected{% endif %}>{{ o.rotulo }}</option>{% endfor %}
-    </select>
-</label>

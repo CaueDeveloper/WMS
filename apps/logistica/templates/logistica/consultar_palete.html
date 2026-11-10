@@ -1,0 +1,212 @@
+{% extends 'core/_shell.html' %}
+{% load core_extras static %}
+
+{% block title %}Consultar — WMS{% endblock %}
+{% block titulo_pagina %}{% if modo == 'palete' %}Consultar Palete{% elif modo == 'lote' %}Consultar Lote{% elif modo == 'corredor' %}Consultar Corredor{% else %}Consultar{% endif %}{% endblock %}
+
+{% block shell_content %}
+{% if modo == 'palete' %}
+    {% if palete %}
+    <div class="mx-auto grid max-w-5xl gap-6 lg:grid-cols-5 lg:gap-8">
+        <section class="lg:col-span-2" aria-labelledby="titulo-palete">
+            <h2 id="titulo-palete" class="mb-2 break-all font-mono text-lg">{{ palete.barcode_palete }}</h2>
+            <p class="mb-3">{% include 'core/_status_palete.html' %} <span class="ml-1 text-xs text-slate-600">{{ palete.get_estado_display }}</span></p>
+            {% include 'core/_ficha_css.html' %}
+            <dl class="ficha">
+                <div class="ficha-item largo"><dt>Produto</dt><dd>{{ palete.descricao }}<small>SKU {{ palete.sku }}</small></dd></div>
+                <div class="ficha-item"><dt>Endereço atual</dt><dd class="mono">{{ palete.endereco.codigo|default:"—" }}</dd></div>
+                <div class="ficha-item"><dt>Lote</dt><dd>{{ palete.lote }}</dd></div>
+                <div class="ficha-item"><dt>Peso</dt><dd>{{ palete.peso_kg|peso }} kg</dd></div>
+                <div class="ficha-item"><dt>Fabricação</dt><dd>{{ palete.data_fabricacao_exibida|date:"d/m/Y" }}</dd></div>
+                <div class="ficha-item"><dt>Vencimento</dt><dd>{{ palete.data_vencimento|date:"d/m/Y"|default:"—" }}</dd></div>
+            </dl>
+        </section>
+
+        <section class="lg:col-span-3" aria-labelledby="titulo-historico">
+            <h2 id="titulo-historico" class="mb-3 text-lg">Histórico</h2>
+            <ol class="relative ml-2 border-l-2 border-slate-200">
+                {% for etapa in linha_do_tempo %}
+                <li class="relative pb-5 pl-6 last:pb-0">
+                    {% if etapa.evento %}
+                    <span class="absolute -left-[7px] top-1 h-3 w-3 rounded-full border-2 border-white bg-primary-600" aria-hidden="true"></span>
+                    <div class="text-sm font-semibold text-slate-900">{{ etapa.rotulo }}</div>
+                    <div class="text-sm text-slate-700">
+                        {% firstof etapa.evento.usuario.get_full_name etapa.evento.usuario.username "—" %}
+                        {% if etapa.retirada %}· −{{ etapa.retirada.peso_kg|peso }} kg (saldo {{ etapa.retirada.saldo_kg|peso }} kg){% endif %}
+                        · <time datetime="{{ etapa.evento.criado_em|date:'c' }}">{{ etapa.evento.criado_em|date:"d/m/Y" }} às {{ etapa.evento.criado_em|time:"H:i:s" }}</time>
+                    </div>
+                    {% else %}
+                    <span class="absolute -left-[7px] top-1 h-3 w-3 rounded-full border-2 border-slate-300 bg-white" aria-hidden="true"></span>
+                    <div class="text-sm text-slate-600">{{ etapa.rotulo }}</div>
+                    <div class="text-sm text-slate-500">ainda não ocorreu</div>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ol>
+        </section>
+    </div>
+
+    <div class="mx-auto mt-6 flex max-w-5xl flex-col-reverse gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <a class="btn btn-secondary min-h-11" href="?modo=palete">Nova bipagem</a>
+    </div>
+    {% else %}
+        <p class="hidden lg:block text-sm text-slate-600 mb-4">Informe o código de barras do palete para ver os detalhes.</p>
+        <form method="get" autocomplete="off" class="form-card barra-form max-w-lg mx-auto lg:max-w-none lg:mx-0">
+            <input type="hidden" name="modo" value="palete">
+            <div class="form-card-body">
+                <div>
+                    <input type="text" name="barcode" id="id_barcode" class="input-field input-coletor" value="{{ barcode }}" autofocus autocomplete="off" placeholder="Código de barras" aria-describedby="dica-barcode">
+                    <button type="button" class="btn btn-secondary mt-2 btn-coletor" data-leitor-qr="id_barcode">Ler QR Code com a câmera</button>
+                </div>
+            </div>
+            <footer class="form-card-footer">
+                <button type="submit" class="btn min-h-11">Buscar</button>
+            </footer>
+        </form>
+    {% endif %}
+
+{% elif modo == 'lote' %}
+    <p class="hidden lg:block text-sm text-slate-600 mb-4">Informe o lote para listar os paletes.</p>
+    <form method="get" autocomplete="off" class="form-card barra-form max-w-lg mx-auto lg:max-w-none lg:mx-0 mb-6">
+        <input type="hidden" name="modo" value="lote">
+        <div class="form-card-body">
+            <div>
+                <input type="text" name="lote" id="id_lote" class="input-field input-coletor" value="{{ lote }}" autofocus autocomplete="off" autocapitalize="characters" placeholder="Lote" aria-describedby="dica-lote">
+            </div>
+        </div>
+        <footer class="form-card-footer">
+            <button type="submit" class="btn min-h-11">Buscar</button>
+        </footer>
+    </form>
+
+    {% if resultados %}
+    <p class="mb-2 text-sm text-slate-700" role="status"><strong>{{ resultados.paginator.count }}</strong> palete{{ resultados.paginator.count|pluralize }} encontrado{{ resultados.paginator.count|pluralize }}</p>
+    <div class="overflow-x-auto mb-4">
+        <table class="table-admin tabela-responsiva">
+            <thead>
+                <tr>
+                    <th>Barcode</th>
+                    <th>SKU</th>
+                    <th>Lote</th>
+                    <th>Status</th>
+                    <th>Data de Fabricação</th>
+                    <th>Endereço</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in resultados %}
+                <tr>
+                    <td data-label="Barcode"><div><a class="font-mono text-primary-700 underline-offset-2 hover:underline" href="?modo=palete&barcode={{ p.barcode_palete|urlencode }}">{{ p.barcode_palete }}</a></div></td>
+                    <td data-label="SKU"><div>{{ p.sku }}</div></td>
+                    <td data-label="Lote"><div>{{ p.lote }}</div></td>
+                    <td data-label="Status"><div>{% include 'core/_status_palete.html' with palete=p %}</div></td>
+                    <td data-label="Data de Fabricação"><div>{{ p.data_fabricacao_exibida|date:"d/m/Y" }}</div></td>
+                    <td data-label="Endereço"><div class="font-mono">{{ p.endereco.codigo|default:"—" }}</div></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+    {% with lote_url=lote|urlencode sku_url=sku|urlencode %}
+        {% include 'core/_paginacao.html' with pagina=resultados prefixo='?modo=lote&lote='|add:lote_url|add:'&sku='|add:sku_url|add:'&pg=' %}
+    {% endwith %}
+
+{% elif modo == 'corredor' %}
+    <p class="hidden lg:block text-sm text-slate-600 mb-4">Bipe o QR da etiqueta do corredor para ver a ocupação e os paletes armazenados.</p>
+    <form method="get" autocomplete="off" class="form-card barra-form max-w-lg mx-auto lg:max-w-none lg:mx-0 mb-6">
+        <input type="hidden" name="modo" value="corredor">
+        <div class="form-card-body">
+            <div>
+                <input type="text" name="corredor" id="id_corredor" class="input-field input-coletor" value="{{ texto }}" autofocus autocomplete="off" autocapitalize="characters" placeholder="Bipe o QR do corredor">
+                <button type="button" class="btn btn-secondary mt-2 btn-coletor" data-leitor-qr="id_corredor">Ler QR Code com a câmera</button>
+            </div>
+        </div>
+        <footer class="form-card-footer">
+            <button type="submit" class="btn min-h-11">Buscar</button>
+        </footer>
+    </form>
+
+    {% if corredor %}
+    <h2 class="mb-2 text-lg">Corredor {{ corredor }}</h2>
+    <p class="mb-3 text-sm text-slate-700" role="status">
+        <strong>{{ resumo.paletes }}</strong> palete{{ resumo.paletes|pluralize }} armazenado{{ resumo.paletes|pluralize }}
+        · <strong>{{ resumo.ocupados }}</strong> de {{ resumo.total }} endereços ocupados ({{ resumo.percentual }}%)
+        · {{ resumo.livres }} livre{{ resumo.livres|pluralize }}{% if resumo.inativos %} · {{ resumo.inativos }} inativo{{ resumo.inativos|pluralize }}{% endif %}
+    </p>
+
+    <section class="mb-6" aria-labelledby="titulo-mapa-corredor">
+        <h3 id="titulo-mapa-corredor" class="mb-2 text-base">Mapa 3D do corredor {{ corredor }}</h3>
+        {% include 'logistica/_mapa_3d.html' with corredor_filtro=corredor %}
+    </section>
+
+    <div class="overflow-x-auto mb-6">
+        <table class="table-admin">
+            <thead>
+                <tr><th>Andar</th><th class="num">Endereços</th><th class="num">Ocupados</th><th class="num">Livres</th><th class="num">Ocupação</th></tr>
+            </thead>
+            <tbody>
+                {% for linha in por_andar %}
+                <tr>
+                    <td>Andar {{ linha.andar }}</td>
+                    <td class="num">{{ linha.resumo.total }}</td>
+                    <td class="num">{{ linha.resumo.ocupados }}</td>
+                    <td class="num">{{ linha.resumo.livres }}</td>
+                    <td class="num">{{ linha.resumo.percentual }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <h3 class="mb-2 text-base">Paletes armazenados</h3>
+    {% if resultados %}
+    <div class="overflow-x-auto mb-4">
+        <table class="table-admin tabela-responsiva">
+            <thead>
+                <tr><th>Endereço</th><th>Barcode</th><th>SKU</th><th>Lote</th><th>Armazenado em</th></tr>
+            </thead>
+            <tbody>
+                {% for p in resultados %}
+                <tr>
+                    <td data-label="Endereço"><div class="font-mono">{{ p.endereco.codigo }}</div></td>
+                    <td data-label="Barcode"><div><a class="font-mono text-primary-700 underline-offset-2 hover:underline" href="?modo=palete&barcode={{ p.barcode_palete|urlencode }}">{{ p.barcode_palete }}</a></div></td>
+                    <td data-label="SKU"><div>{{ p.sku }}</div></td>
+                    <td data-label="Lote"><div>{{ p.lote }}</div></td>
+                    <td data-label="Armazenado em"><div>{{ p.armazenado_em|date:"d/m/Y H:i"|default:"—" }}</div></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% include 'core/_paginacao.html' with pagina=resultados prefixo='?modo=corredor&corredor='|add:corredor|add:'&pg=' %}
+    {% else %}
+        {% include 'core/_vazio.html' with texto='Nenhum palete armazenado neste corredor.' %}
+    {% endif %}
+    {% endif %}
+
+{% else %}
+    <p class="hidden lg:block text-sm text-slate-600 mb-4">Escolha como deseja consultar o estoque.</p>
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 max-w-2xl lg:max-w-none">
+        <a class="card-plain flex min-h-24 items-start gap-4 no-underline transition hover:border-primary-300 hover:shadow-sm" href="?modo=palete">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-50 text-primary-700">{% include 'core/_icone.html' with nome='tag' %}</span>
+            <span><span class="block font-semibold text-slate-900">Palete</span><span class="block text-sm text-slate-600">Bipe um código e veja detalhes e histórico.</span></span>
+        </a>
+        <a class="card-plain flex min-h-24 items-start gap-4 no-underline transition hover:border-primary-300 hover:shadow-sm" href="?modo=lote">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-50 text-primary-700">{% include 'core/_icone.html' with nome='layers' %}</span>
+            <span><span class="block font-semibold text-slate-900">Lote</span><span class="block text-sm text-slate-600">Liste todos os paletes de um lote.</span></span>
+        </a>
+        <a class="card-plain flex min-h-24 items-start gap-4 no-underline transition hover:border-primary-300 hover:shadow-sm" href="?modo=corredor">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-50 text-primary-700">{% include 'core/_icone.html' with nome='pin' %}</span>
+            <span><span class="block font-semibold text-slate-900">Corredor</span><span class="block text-sm text-slate-600">Bipe o QR do corredor e veja a ocupação.</span></span>
+        </a>
+    </div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if modo == 'palete' or modo == 'corredor' %}
+<script src="{% static 'core/js/jsQR.js' %}"></script>
+<script src="{% static 'core/js/leitor_qr.js' %}"></script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,238 @@
+{% extends 'core/_shell_coletor.html' %}
+{% load core_extras %}
+
+{% block title %}Produção — WMS{% endblock %}
+{% block titulo_pagina_coletor %}Produção{% endblock %}
+{% block largura_coletor %}max-w-md lg:max-w-none{% endblock %}
+
+{% block shell_content_coletor %}
+{# Desktop: texto de apoio + botão "Nova etiqueta" e tabela dos últimos paletes (mesmo padrão da tela Usuários) #}
+<div class="hidden lg:flex items-center justify-between gap-3 mb-4">
+    <button type="button" class="btn shrink-0" id="abrir-etiqueta">＋ Nova etiqueta</button>
+</div>
+
+<div class="hidden lg:block">
+{% if paletes_recentes %}
+    <div class="overflow-x-auto">
+    <table class="table-admin">
+        <thead>
+            <tr>
+                <th>Barcode</th>
+                <th>Lote</th>
+                <th>SKU</th>
+                <th>Descrição</th>
+                <th class="num">Peso (kg)</th>
+                <th>Fabricação</th>
+                <th>Vencimento</th>
+                <th>Criado em</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for palete in paletes_recentes %}
+            <tr>
+                <td>{{ palete.barcode_palete }}</td>
+                <td>{{ palete.lote }}</td>
+                <td>{{ palete.sku }}</td>
+                <td>{{ palete.descricao }}</td>
+                <td class="num">{{ palete.peso_kg|peso }}</td>
+                <td>{{ palete.data_fabricacao|date:"d/m/Y"|default:"—" }}</td>
+                <td>{{ palete.data_vencimento|date:"d/m/Y"|default:"—" }}</td>
+                <td>{{ palete.criado_em|date:"d/m/Y H:i" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% else %}
+    {% include 'core/_vazio.html' with texto='Nenhum palete criado ainda. Clique em "Nova etiqueta" para emitir a primeira.' %}
+{% endif %}
+</div>
+
+{# No celular o formulário fica inline (o <dialog> é forçado a aparecer); no desktop é um pop-up #}
+<dialog id="dlg-etiqueta" class="dialog-form"{% if form.errors %} data-abrir-ao-carregar{% endif %}>
+<form method="post" class="form-card">
+    {% csrf_token %}
+    <div class="form-card-body">
+        {% for erro in form.non_field_errors %}<p class="alert-error texto-coletor mb-0">{{ erro }}</p>{% endfor %}
+        {% for campo in form %}
+            <div id="linha-{{ campo.name }}">
+                {% if campo.name == 'peso_variavel' %}
+                    <label for="{{ campo.id_for_label }}" class="mb-0 flex min-h-12 w-full cursor-pointer items-center gap-3 text-base font-normal lg:min-h-0 lg:text-sm"><span class="shrink-0">{{ campo }}</span> <span>{{ campo.label }}</span></label>
+                    {# Um campo de peso por palete, gerado pelo JS conforme a quantidade #}
+                    <div id="linha-pesos" class="mt-3 space-y-3"></div>
+                {% else %}
+                    <label for="{{ campo.id_for_label }}" class="texto-coletor">{{ campo.label }}</label>
+                    {{ campo }}
+                    {% if campo.name == 'produto' %}<p id="estoque-sap" class="mt-2 mb-0 text-sm font-semibold text-slate-700" hidden></p>{% endif %}
+                {% endif %}
+                {% for erro in campo.errors %}<p class="alert-error texto-coletor mt-2 mb-0">{{ erro }}</p>{% endfor %}
+            </div>
+        {% endfor %}
+        <p id="linha-peso-padrao" class="m-0 text-xl font-bold">Peso do palete: <span id="peso-padrao">{{ peso_fixo_kg|peso }} kg</span></p>
+    </div>
+    <footer class="form-card-footer">
+        <button type="button" class="btn btn-secondary hidden lg:inline-flex" data-fechar>Cancelar</button>
+        <button type="submit" class="btn btn-coletor-lg">Emitir Etiqueta</button>
+    </footer>
+</form>
+</dialog>
+
+{# Confirmação antes de criar os paletes #}
+<dialog id="dlg-confirmar" class="dialog-modal">
+    <div class="form-card">
+        <header class="form-card-header">
+            <h2 class="form-card-title">Confirmar emissão</h2>
+            <p class="form-card-subtitle">Todos os dados estão corretos?</p>
+        </header>
+        <div class="form-card-body">
+            <dl class="m-0 space-y-3 texto-coletor">
+                <div><dt class="text-slate-600">Produto</dt><dd class="m-0 font-semibold" id="conf-produto"></dd></div>
+                <div><dt class="text-slate-600">Lote</dt><dd class="m-0 font-semibold" id="conf-lote"></dd></div>
+                <div><dt class="text-slate-600">Quantidade de paletes</dt><dd class="m-0 font-semibold" id="conf-quantidade"></dd></div>
+                <div><dt class="text-slate-600">Data de fabricação</dt><dd class="m-0 font-semibold" id="conf-data"></dd></div>
+                <div><dt class="text-slate-600">Data de vencimento</dt><dd class="m-0 font-semibold" id="conf-vencimento"></dd></div>
+                <div><dt class="text-slate-600">Peso do palete</dt><dd class="m-0 font-semibold" id="conf-peso"></dd></div>
+            </dl>
+            <figure class="m-0 mt-4">
+                <figcaption class="mb-1 text-sm text-slate-600">Pré-visualização da etiqueta</figcaption>
+                <img id="conf-preview" alt="Pré-visualização da etiqueta" class="hidden w-full rounded border border-slate-300 bg-white">
+                <p id="conf-preview-status" class="m-0 text-sm text-slate-600"></p>
+            </figure>
+        </div>
+        <footer class="form-card-footer max-lg:flex-col-reverse">
+            <button type="button" class="btn btn-secondary btn-coletor" id="conf-voltar">Voltar</button>
+            <button type="button" class="btn btn-coletor" id="conf-confirmar">Confirmar e emitir</button>
+        </footer>
+    </div>
+</dialog>
+{{ produtos_peso_variavel|json_script:"produtos-peso-variavel" }}
+{{ estoque_sap|json_script:"estoque-sap-dados" }}
+{{ skus_produtos|json_script:"skus-produtos" }}
+{{ peso_ultimo_enviado|json_script:"peso-ultimo-enviado" }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var checkPesoVariavel = document.getElementById('id_peso_variavel');
+    var linhaPesos = document.getElementById('linha-pesos');
+    var campoQuantidade = document.getElementById('id_quantidade');
+    var selectProduto = document.getElementById('id_produto');
+    var produtosPesoVariavel = JSON.parse(document.getElementById('produtos-peso-variavel').textContent).map(String);
+    var pesoUltimoEnviado = JSON.parse(document.getElementById('peso-ultimo-enviado').textContent);
+
+    function campoPesoUltimo() { return linhaPesos.querySelector('input[name="peso_ultimo"]'); }
+
+    // Peso variável: só o último palete tem peso próprio; os demais usam o peso fixo
+    function atualizarCampoPeso() {
+        var existente = campoPesoUltimo();
+        if (!checkPesoVariavel.checked) { linhaPesos.innerHTML = ''; return; }
+        if (existente) return;
+        var rotulo = document.createElement('label');
+        rotulo.className = 'texto-coletor';
+        rotulo.textContent = 'Peso do último palete (kg)';
+        var campo = document.createElement('input');
+        campo.type = 'number';
+        campo.name = 'peso_ultimo';
+        campo.step = '0.001';
+        campo.min = '0.001';
+        campo.required = true;
+        campo.autocomplete = 'off';
+        campo.className = 'input-field input-field-lg';
+        campo.value = pesoUltimoEnviado;
+        rotulo.appendChild(campo);
+        linhaPesos.appendChild(rotulo);
+    }
+
+    checkPesoVariavel.addEventListener('change', atualizarCampoPeso);
+    // Produto de peso variável já nasce com o peso manual marcado
+    var estoqueSap = JSON.parse(document.getElementById('estoque-sap-dados').textContent);
+    var skusProdutos = JSON.parse(document.getElementById('skus-produtos').textContent);
+    var avisoEstoque = document.getElementById('estoque-sap');
+    function mostrarEstoque() {
+        var sku = skusProdutos[selectProduto.value];
+        avisoEstoque.hidden = !sku;
+        if (!sku) return;
+        var saldo = estoqueSap[sku];
+        avisoEstoque.textContent = saldo === undefined ? 'Estoque: não sincronizado com o SAP'
+            : 'Disponível em estoque: ' + parseFloat(saldo).toLocaleString('pt-BR', {maximumFractionDigits: 3});
+    }
+    mostrarEstoque();
+    selectProduto.addEventListener('change', mostrarEstoque);
+    selectProduto.addEventListener('change', function () {
+        if (produtosPesoVariavel.indexOf(selectProduto.value) !== -1) checkPesoVariavel.checked = true;
+        atualizarCampoPeso();
+    });
+    atualizarCampoPeso();
+
+    // Confirmação antes de enviar o formulário
+    var formEtiqueta = document.querySelector('#dlg-etiqueta form');
+    var dlgConfirmar = document.getElementById('dlg-confirmar');
+    var confirmado = false;
+    function formatarData(iso) { var p = iso.split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : iso; }
+    formEtiqueta.addEventListener('submit', function (e) {
+        if (confirmado) return;
+        e.preventDefault();
+        if (!formEtiqueta.reportValidity()) return;
+        document.getElementById('conf-produto').textContent = selectProduto.options[selectProduto.selectedIndex].text;
+        document.getElementById('conf-lote').textContent = document.getElementById('id_lote').value.trim().toUpperCase();
+        document.getElementById('conf-quantidade').textContent = document.getElementById('id_quantidade').value;
+        document.getElementById('conf-data').textContent = formatarData(document.getElementById('id_data_fabricacao').value);
+        document.getElementById('conf-vencimento').textContent = formatarData(document.getElementById('id_data_vencimento').value);
+        var pesoPadrao = document.getElementById('peso-padrao').textContent;
+        var quantidadeConf = parseInt(campoQuantidade.value, 10) || 1;
+        document.getElementById('conf-peso').textContent = checkPesoVariavel.checked
+            ? (quantidadeConf > 1 ? (quantidadeConf - 1) + ' × ' + pesoPadrao + ' · último: ' : '')
+                + Number(campoPesoUltimo().value).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 3}) + ' kg'
+            : pesoPadrao;
+        carregarPreview();
+        dlgConfirmar.showModal();
+    });
+
+    // Imagem da etiqueta gerada no servidor com os dados do formulário
+    var imgPreview = document.getElementById('conf-preview');
+    var statusPreview = document.getElementById('conf-preview-status');
+    var urlPreview = null;
+    function limparPreview() {
+        if (urlPreview) { URL.revokeObjectURL(urlPreview); urlPreview = null; }
+        imgPreview.classList.add('hidden');
+        imgPreview.removeAttribute('src');
+    }
+    function carregarPreview() {
+        limparPreview();
+        statusPreview.textContent = 'Gerando pré-visualização…';
+        fetch('{% url "producao:preview_etiqueta" %}', {
+            method: 'POST',
+            body: new FormData(formEtiqueta),
+            credentials: 'same-origin'
+        }).then(function (r) {
+            if (!r.ok) throw new Error(r.status);
+            return r.blob();
+        }).then(function (blob) {
+            urlPreview = URL.createObjectURL(blob);
+            imgPreview.src = urlPreview;
+            imgPreview.classList.remove('hidden');
+            statusPreview.textContent = '';
+        }).catch(function () {
+            statusPreview.textContent = 'Não foi possível gerar a pré-visualização.';
+        });
+    }
+    dlgConfirmar.addEventListener('close', limparPreview);
+    document.getElementById('conf-voltar').addEventListener('click', function () { dlgConfirmar.close(); });
+    document.getElementById('conf-confirmar').addEventListener('click', function () {
+        confirmado = true;
+        this.disabled = true;  // evita duplo clique emitir etiquetas em dobro
+        formEtiqueta.submit();
+    });
+
+    // Pop-up só em tela grande (no celular o <dialog> fica inline, sempre visível)
+    var dlg = document.getElementById('dlg-etiqueta');
+    var telaGrande = window.matchMedia('(min-width: 1024px)');
+    function abrirPopup() { if (telaGrande.matches && !dlg.open) dlg.showModal(); }
+    document.getElementById('abrir-etiqueta').addEventListener('click', abrirPopup);
+    dlg.querySelector('[data-fechar]').addEventListener('click', function () { dlg.close(); });
+    dlg.addEventListener('mousedown', function (e) { if (e.target === dlg) dlg.close(); });
+    if (dlg.hasAttribute('data-abrir-ao-carregar')) abrirPopup();  // reabre para mostrar erros de validação
+})();
+</script>
+{% endblock %}

@@ -5,6 +5,7 @@ class CoreConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'apps.core'
     label = 'core'
+    verbose_name = 'Perfil'
 
     def ready(self):
         from django.conf import settings

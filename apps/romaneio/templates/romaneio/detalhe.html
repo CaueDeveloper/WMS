@@ -1,0 +1,127 @@
+{% extends 'core/_shell.html' %}
+{% load core_extras static %}
+
+{% block title %}Romaneio {{ romaneio.pk }} — WMS{% endblock %}
+{% block titulo_pagina %}Romaneio {{ romaneio.pk }}{% endblock %}
+
+{% block shell_content %}
+{% include 'core/_ficha_css.html' %}
+<dl class="ficha mb-6 max-w-3xl">
+    {% if romaneio.notas.all %}
+    <div class="ficha-item largo"><dt>Notas fiscais</dt><dd>{% for n in romaneio.notas.all %}{{ n.docnum }}{% if not forloop.last %}, {% endif %}{% endfor %}</dd></div>
+    {% endif %}
+    <div class="ficha-item"><dt>Data do romaneio</dt><dd>{{ romaneio.data|date:"d/m/Y" }}</dd></div>
+    <div class="ficha-item"><dt>Peso total</dt><dd>{{ romaneio.peso_total|peso }} kg</dd></div>
+</dl>
+
+{% if romaneio.status == 'ABERTO' %}
+<section class="cl-progresso" aria-label="Progresso da coleta">
+    <div class="cl-progresso-topo"><strong>{{ coletados }} de {{ itens|length }}</strong> coletados<span>{{ pct }}%</span></div>
+    <div class="cl-barra" role="progressbar" aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100"><span style="width:{{ pct }}%"></span></div>
+</section>
+
+<form method="post" action="{% url 'romaneio:coletar' romaneio.pk %}" autocomplete="off" class="cl-bip">
+    {% csrf_token %}
+    <input type="hidden" id="barcode_palete" name="barcode_palete">
+    <button type="button" class="cl-camera" data-leitor-qr="barcode_palete">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>
+        Ler QR Code do palete
+    </button>
+</form>
+
+{% if filas %}
+<h2 class="cl-titulo">Próximos a coletar</h2>
+<div class="cl-filas">
+    {% for fila in filas %}
+    <article class="cl-fila">
+        <header class="cl-fila-topo">
+            <span class="cl-local">{% if fila.corredor %}Corredor {{ fila.corredor }} · Andar {{ fila.andar }}{% else %}Local não registrado{% endif %}</span>
+            {% if fila.atras %}<span class="cl-atras">+{{ fila.atras|length }} na fila</span>{% endif %}
+        </header>
+        <div class="cl-produto">{{ fila.proximo.descricao }}</div>
+        <div class="cl-detalhe"><span class="cl-sku">{{ fila.proximo.sku }}</span><strong>{{ fila.proximo.peso_kg|peso }} kg</strong></div>
+        {% if fila.no_mapa %}
+        <a class="cl-mapa no-underline" href="{% url 'logistica:mapa_estoque' %}?visao=3d&amp;destacar={{ fila.proximo.retirada.palete.barcode_palete|urlencode }}">Ver no mapa</a>
+        {% endif %}
+    </article>
+    {% endfor %}
+</div>
+{% else %}
+<p class="cl-pronto">Tudo coletado. Confirme a coleta abaixo.</p>
+{% endif %}
+
+{% if coletados_lista %}
+<details class="cl-feitos">
+    <summary>Já coletados ({{ coletados_lista|length }})</summary>
+    <ul>
+        {% for item in coletados_lista %}
+        <li><span>{{ item.descricao }} <small>{{ item.sku }}</small></span><span>{{ item.peso_kg|peso }} kg · {{ item.coletado_em|date:"H:i" }}</span></li>
+        {% endfor %}
+    </ul>
+</details>
+{% endif %}
+{% else %}
+<h2 class="cl-titulo">Itens</h2>
+<div class="overflow-x-auto mb-4">
+    <table class="table-admin tabela-responsiva">
+        <thead><tr><th>Produto</th><th>SKU</th><th class="num">Peso (kg)</th><th>Coleta</th></tr></thead>
+        <tbody>
+            {% for item in itens %}
+            <tr>
+                <td data-label="Produto"><div>{{ item.descricao }}</div></td>
+                <td data-label="SKU"><div>{{ item.sku }}</div></td>
+                <td data-label="Peso (kg)" class="num"><div>{{ item.peso_kg|peso }}</div></td>
+                <td data-label="Coleta"><div>{% if item.coletado_em %}Coletado {{ item.coletado_em|date:"d/m H:i" }}{% else %}Pendente{% endif %}</div></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot><tr><th colspan="2">Peso total</th><th class="num">{{ romaneio.peso_total|peso }} kg</th><th></th></tr></tfoot>
+    </table>
+</div>
+{% endif %}
+<div class="flex flex-wrap gap-3">
+    <a class="btn btn-secondary min-h-11 no-underline" href="{% url 'romaneio:lista' %}">Voltar</a>
+    {% if romaneio.status == 'ABERTO' %}
+    <form method="post" action="{% url 'romaneio:coletar' romaneio.pk %}">
+        {% csrf_token %}<input type="hidden" name="acao" value="confirmar">
+        <button type="submit" class="btn min-h-11"{% if faltam %} disabled title="Falta coletar {{ faltam }} item(ns)"{% endif %}>Confirmar coleta</button>
+    </form>
+    {% endif %}
+    {% if romaneio.status == 'COLETADO' %}
+    <a class="btn min-h-11 no-underline" href="{% url 'romaneio:imprimir' romaneio.pk %}" target="_blank" rel="noopener">Imprimir</a>
+    {% endif %}
+</div>
+<style>
+.cl-progresso{max-width:42rem;margin-bottom:1rem}
+.cl-progresso-topo{display:flex;justify-content:space-between;align-items:baseline;font-size:.95rem;color:var(--color-primary-700,#183f38)}
+.cl-progresso-topo span{font-weight:700;font-size:1.1rem}
+.cl-barra{height:.7rem;border-radius:999px;background:var(--color-primary-100,#d7e8e3);overflow:hidden;margin-top:.35rem}
+.cl-barra span{display:block;height:100%;border-radius:inherit;background:var(--color-primary-500,#256359);transition:width .3s}
+.cl-bip{max-width:42rem;margin-bottom:1.5rem;padding:1rem;border-radius:1rem;background:var(--color-primary-50,#eef5f3);border:1px solid var(--color-primary-100,#d7e8e3)}
+.cl-camera{display:flex;align-items:center;justify-content:center;gap:.75rem;width:100%;min-height:4rem;border:0;border-radius:.9rem;background:var(--color-primary-600,#1d4e45);color:#fff;font-size:1.15rem;font-weight:700;cursor:pointer;transition:background .15s,transform .1s}
+.cl-camera:hover{background:var(--color-primary-700,#183f38)}
+.cl-camera:active{transform:scale(.98)}
+.cl-titulo{font-size:1.05rem;margin:0 0 .6rem;color:var(--color-primary-700,#183f38)}
+.cl-filas{display:grid;gap:.75rem;grid-template-columns:repeat(auto-fill,minmax(16rem,1fr));margin-bottom:1.25rem}
+.cl-fila{display:grid;gap:.4rem;padding:1rem;border-radius:1rem;background:#fff;border:1px solid var(--color-primary-100,#d7e8e3);border-left:5px solid var(--color-primary-500,#256359);box-shadow:0 1px 2px rgba(14,38,34,.06)}
+.cl-fila-topo{display:flex;justify-content:space-between;align-items:center;gap:.5rem}
+.cl-local{font-weight:700;font-size:1.05rem;color:var(--color-primary-700,#183f38)}
+.cl-atras{font-size:.72rem;font-weight:600;padding:.15rem .55rem;border-radius:999px;background:var(--color-primary-50,#eef5f3);color:var(--color-primary-500,#256359)}
+.cl-produto{font-size:1rem;color:#0f172a}
+.cl-detalhe{display:flex;justify-content:space-between;align-items:center;color:#475569;font-size:.9rem}
+.cl-detalhe strong{font-size:1.25rem;color:var(--color-success-600,#256340)}
+.cl-sku{font-family:ui-monospace,monospace;font-size:.75rem;background:#eef2f1;border-radius:.3rem;padding:.05rem .4rem}
+.cl-mapa{justify-self:start;margin-top:.25rem;padding:.4rem .9rem;border-radius:999px;font-size:.85rem;font-weight:600;background:var(--color-primary-600,#1d4e45);color:#fff}
+.cl-mapa:hover{background:var(--color-primary-700,#183f38)}
+.cl-pronto{padding:1rem;border-radius:1rem;background:var(--color-success-50,#e9f4ed);color:var(--color-success-600,#256340);font-weight:600;max-width:42rem}
+.cl-feitos{max-width:42rem;margin-bottom:1.25rem;border:1px solid #e2e8f0;border-radius:.75rem;padding:.5rem .9rem;background:#fff}
+.cl-feitos summary{cursor:pointer;font-weight:600;color:var(--color-primary-700,#183f38)}
+.cl-feitos ul{list-style:none;margin:.5rem 0 0;padding:0;display:grid;gap:.3rem}
+.cl-feitos li{display:flex;justify-content:space-between;gap:1rem;font-size:.85rem;color:#475569;border-top:1px solid #f1f5f9;padding-top:.3rem}
+.cl-feitos small{color:#94a3b8}
+</style>
+{% if romaneio.status == 'ABERTO' %}
+<script src="{% static 'core/js/jsQR.js' %}"></script>
+<script src="{% static 'core/js/leitor_qr.js' %}"></script>
+{% endif %}
+{% endblock %}

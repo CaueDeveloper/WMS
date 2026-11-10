@@ -1,9 +1,0 @@
-{# Seletor segmentado (um único grupo de botões). `pontos` mostra a cor do nível antes do rótulo. #}
-<div class="inline-flex overflow-hidden rounded-md border border-slate-300 bg-white text-sm">
-    {% for o in opcoes %}
-        <a href="{{ o.url }}" {% if o.ativo %}aria-current="true"{% endif %}
-           class="inline-flex min-h-11 items-center gap-1.5 px-3.5 no-underline transition-colors duration-150 {% if not forloop.first %}border-l border-slate-300{% endif %} {% if o.ativo %}bg-primary-600 font-semibold text-white{% else %}text-slate-700 hover:bg-slate-100{% endif %}">
-            {% if pontos and o.valor %}<span class="inline-block h-2.5 w-2.5 rounded-full ring-1 ring-white/60 {% if o.valor == 'livre' %}bg-emerald-500{% elif o.valor == 'ocupado' %}bg-rose-600{% else %}bg-slate-400{% endif %}" aria-hidden="true"></span>{% endif %}{{ o.rotulo|cut:"Andar " }}
-        </a>
-    {% endfor %}
-</div>

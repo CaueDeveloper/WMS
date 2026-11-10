@@ -11,10 +11,10 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.recebimento.models import Palete, PaleteHistorico
+from apps.producao.models import Palete, PaleteHistorico
 
 from .decorators import group_required
-from .forms import AlterarGrupoUsuarioForm, NovoUsuarioForm
+from .forms import AlterarGrupoUsuarioForm, NovoOperadorForm, NovoUsuarioForm
 from .ldap_lookup import (
     GRUPOS_ATRIBUIVEIS, PAPEIS, SETORES, LdapIndisponivelError, buscar_usuarios_ad, listar_usuarios_ad, nome_grupo_django,
     obter_usuario_ad,
@@ -28,11 +28,11 @@ TOP_N_PRODUTOS_GRAFICO = 15
 # Etapas do palete na tela inicial, na ordem do fluxo real. `tela` é a view que
 # resolve aquela etapa; o link só aparece se o usuário tiver acesso a ela.
 ETAPAS_FLUXO = (
-    ('Etiquetados', ('CRIADO',), 'aguardando bipagem', 'recebimento:transferencia_gestor'),
-    ('Em transferência', ('EM_TRANSFERENCIA',), 'aguardando aprovação do gestor', 'recebimento:transferencia_gestor'),
-    ('Na Logística', ('CONFERIDO', 'EM_CONFERENCIA_LOGISTICA'), 'aguardando conferência', 'recebimento:transferencia_logistica'),
-    ('A armazenar', ('CONFERIDO_LOGISTICA',), 'aguardando endereço', 'estoque:putaway'),
-    ('Armazenados', ('ARMAZENADO',), 'guardados no mapa', 'estoque:mapa_estoque'),
+    ('Fabricados', ('FABRICADO',), 'producao:transferencia_gestor'),
+    ('Transferência de Produção', ('TRANSFERENCIA_PRODUCAO',), 'producao:transferencia_gestor'),
+    ('Transferência de Logística', ('APROVADO_PRODUCAO', 'TRANSFERENCIA_LOGISTICA'), 'producao:transferencia_logistica'),
+    ('A armazenar', ('APROVADO_LOGISTICA',), 'logistica:putaway'),
+    ('Armazenados', ('ARMAZENADO',), 'logistica:mapa_estoque'),
 )
 MOVIMENTACOES_RECENTES = 8
 DIAS_SEMANA = ('segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado', 'domingo')
@@ -46,10 +46,9 @@ def home(request):
     por_estado = dict(Palete.objects.values_list('estado').annotate(n=Count('id')))
 
     etapas = []
-    for rotulo, estados, situacao, tela in ETAPAS_FLUXO:
+    for rotulo, estados, tela in ETAPAS_FLUXO:
         etapas.append({
             'rotulo': rotulo,
-            'situacao': situacao,
             'quantidade': sum(por_estado.get(estado, 0) for estado in estados),
             'url': reverse(tela) if tela in telas_liberadas else None,
         })
@@ -61,7 +60,7 @@ def home(request):
         'atalhos': [item for item in permitidos if item.view_name != 'home' and item.descricao],
         # Usuário do AD ainda sem perfil não vê movimentações (barcodes, nomes).
         'recentes': (
-            PaleteHistorico.objects.select_related('palete', 'usuario').order_by('-criado_em')[:MOVIMENTACOES_RECENTES]
+            PaleteHistorico.objects.select_related('palete', 'usuario').prefetch_related('usuario__groups').order_by('-criado_em')[:MOVIMENTACOES_RECENTES]
             if request.user.is_superuser or request.user.groups.exists() else []
         ),
     })
@@ -115,6 +114,9 @@ def _usuario_gerenciavel_por_pk(pk):
     return _usuarios_gerenciaveis().filter(pk=pk).first() if str(pk).isdigit() else None
 
 
+PAPEIS_DA_LISTA = {'operador': 'Operador', 'gestor': 'Gestor'}  # ?papel= da tela Usuários -> subgrupo
+
+
 @group_required('Administradores')
 def usuarios(request):
     """Lista os usuários do WMS (Nome, Email, Grupo, Subgrupo) e trata, via POST,
@@ -123,6 +125,8 @@ def usuarios(request):
     necessária porque o AD ainda não distingue os papéis (ver [TRANSIÇÃO] em
     wms/settings.py)."""
     User = get_user_model()
+    filtro = PAPEIS_DA_LISTA.get(request.GET.get('papel') or request.POST.get('papel'))
+    redirecionar = redirect(f"{reverse('usuarios')}?papel={filtro.lower()}" if filtro else 'usuarios')
 
     if request.method == 'POST':
         acao = request.POST.get('acao')
@@ -131,16 +135,16 @@ def usuarios(request):
             form = NovoUsuarioForm(request.POST)
             if not form.is_valid():
                 messages.error(request, 'Selecione um usuário do AD, o grupo e o subgrupo.')
-                return redirect('usuarios')
+                return redirecionar
             username = form.cleaned_data['username']
             try:
                 usuario_ad = obter_usuario_ad(username)
             except LdapIndisponivelError as exc:
                 messages.error(request, str(exc))
-                return redirect('usuarios')
+                return redirecionar
             except Exception:
                 messages.error(request, 'Falha ao consultar o AD.')
-                return redirect('usuarios')
+                return redirecionar
 
             if usuario_ad is None:
                 messages.error(request, f'Usuário "{username}" não encontrado no AD (ou conta desabilitada).')
@@ -167,14 +171,32 @@ def usuarios(request):
                     f'"{nome}" cadastrado como {nome_grupo_django(setor, papel)}. '
                     f'Usuário criado inativo — ative-o na lista abaixo antes que ele possa acessar o sistema.',
                 )
-            return redirect('usuarios')
+            return redirecionar
+
+        if acao == 'novo_operador':
+            # Operador não está no AD: o Administrador cria login e senha locais.
+            form = NovoOperadorForm(request.POST)
+            if not form.is_valid():
+                messages.error(request, 'Informe nome, usuário, senha (mínimo 6 caracteres) e grupo.')
+            elif User.objects.filter(username__iexact=form.cleaned_data['username'].strip()).exists():
+                messages.error(request, f'O usuário "{form.cleaned_data["username"].strip()}" já existe no WMS.')
+            else:
+                dados = form.cleaned_data
+                partes_nome = dados['nome'].strip().split(' ', 1)
+                usuario = User.objects.create_user(
+                    username=dados['username'].strip(), password=dados['senha'],
+                    first_name=partes_nome[0], last_name=partes_nome[1] if len(partes_nome) > 1 else '',
+                )
+                _aplicar_grupo(usuario, dados['grupo'], 'Operador')
+                messages.success(request, f'"{dados["nome"].strip()}" cadastrado como {nome_grupo_django(dados["grupo"], "Operador")}.')
+            return redirecionar
 
         if acao == 'alterar_grupo':
             form = AlterarGrupoUsuarioForm(request.POST)
             usuario = _usuario_gerenciavel_por_pk(request.POST.get('usuario_id'))
             if not form.is_valid() or usuario is None:
                 messages.error(request, 'Não foi possível alterar o grupo: dados inválidos.')
-                return redirect('usuarios')
+                return redirecionar
             setor, papel = form.cleaned_data['grupo'], form.cleaned_data['subgrupo']
             _aplicar_grupo(usuario, setor, papel)
             messages.success(
@@ -182,7 +204,7 @@ def usuarios(request):
                 f'"{usuario.get_full_name() or usuario.username}" agora é {nome_grupo_django(setor, papel)}. '
                 f'O menu e as telas dele já refletem o novo grupo no próximo acesso.',
             )
-            return redirect('usuarios')
+            return redirecionar
 
         if acao == 'ativar':
             usuario = _usuario_gerenciavel_por_pk(request.POST.get('usuario_id'))
@@ -192,7 +214,7 @@ def usuarios(request):
                 usuario.is_active = True
                 usuario.save(update_fields=['is_active'])
                 messages.success(request, f'"{usuario.get_full_name() or usuario.username}" foi ativado e já pode acessar o WMS.')
-            return redirect('usuarios')
+            return redirecionar
 
         if acao == 'inativar':
             usuario = _usuario_gerenciavel_por_pk(request.POST.get('usuario_id'))
@@ -202,7 +224,7 @@ def usuarios(request):
                 usuario.is_active = False
                 usuario.save(update_fields=['is_active'])
                 messages.success(request, f'"{usuario.get_full_name() or usuario.username}" foi inativado e não consegue mais acessar o WMS.')
-            return redirect('usuarios')
+            return redirecionar
 
         if acao == 'excluir':
             usuario = _usuario_gerenciavel_por_pk(request.POST.get('usuario_id'))
@@ -212,18 +234,22 @@ def usuarios(request):
                 nome = usuario.get_full_name() or usuario.username
                 usuario.delete()
                 messages.success(request, f'Usuário "{nome}" excluído.')
-            return redirect('usuarios')
+            return redirecionar
 
-        return redirect('usuarios')
+        return redirecionar
 
     linhas = []
     for usuario in _usuarios_gerenciaveis():
-        setor, papel = _grupo_e_subgrupo(usuario)
-        linhas.append({'usuario': usuario, 'grupo': setor, 'subgrupo': papel})
+        setor, subgrupo = _grupo_e_subgrupo(usuario)
+        if filtro is None or subgrupo == filtro:
+            linhas.append({'usuario': usuario, 'grupo': setor, 'subgrupo': subgrupo})
 
     return render(request, 'core/usuarios.html', {
         'linhas': linhas,
+        'papel': filtro,
+        'titulo': f'{filtro}es' if filtro else 'Usuários',
         'form_novo': NovoUsuarioForm(),
+        'form_operador': NovoOperadorForm(),
         'form_alterar': AlterarGrupoUsuarioForm(),
     })
 
@@ -273,7 +299,7 @@ def _paletes_por_dia(queryset):
 
 def _serie_fluxo_diario(pode_ver_producao, pode_ver_logistica):
     """Paletes por dia em cada etapa do fluxo: criados, aprovados pela
-    Produção (CONFERIDO) e recebidos pela Logística (CONFERIDO_LOGISTICA).
+    Produção (APROVADO_PRODUCAO) e recebidos pela Logística (APROVADO_LOGISTICA).
     A mesma unidade (paletes) nas três séries permite comparar o funil."""
     criados = _paletes_por_dia(
         Palete.objects.annotate(dia=TruncDate('criado_em')).values('dia').annotate(n=Count('id'))
@@ -281,12 +307,12 @@ def _serie_fluxo_diario(pode_ver_producao, pode_ver_logistica):
     producao = logistica = None
     if pode_ver_producao:
         producao = _paletes_por_dia(
-            PaleteHistorico.objects.filter(estado='CONFERIDO').annotate(dia=TruncDate('criado_em'))
+            PaleteHistorico.objects.filter(estado='APROVADO_PRODUCAO').annotate(dia=TruncDate('criado_em'))
             .values('dia').annotate(n=Count('palete_id', distinct=True))
         )
     if pode_ver_logistica:
         logistica = _paletes_por_dia(
-            PaleteHistorico.objects.filter(estado='CONFERIDO_LOGISTICA').annotate(dia=TruncDate('criado_em'))
+            PaleteHistorico.objects.filter(estado='APROVADO_LOGISTICA').annotate(dia=TruncDate('criado_em'))
             .values('dia').annotate(n=Count('palete_id', distinct=True))
         )
 
@@ -339,11 +365,11 @@ def estatisticas(request):
 
     total_lotes_producao = peso_total_producao = 0
     if pode_ver_producao:
-        total_lotes_producao, peso_total_producao = _totais_lotes_aprovados('CONFERIDO')
+        total_lotes_producao, peso_total_producao = _totais_lotes_aprovados('APROVADO_PRODUCAO')
 
     total_lotes_logistica = peso_total_logistica = 0
     if pode_ver_logistica:
-        total_lotes_logistica, peso_total_logistica = _totais_lotes_aprovados('CONFERIDO_LOGISTICA')
+        total_lotes_logistica, peso_total_logistica = _totais_lotes_aprovados('APROVADO_LOGISTICA')
 
     template = 'core/estatisticas.html'
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':

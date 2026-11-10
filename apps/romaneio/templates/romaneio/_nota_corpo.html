@@ -1,0 +1,14 @@
+<div class="rm-corpo-ok" data-atendivel="{{ nota.atendivel|yesno:'1,0' }}" hidden></div>
+<div class="rm-linhas">
+    {% for ln in nota.linhas %}
+    <article class="rm-item rm-{{ ln.status }}">
+        <header class="rm-item-topo">
+            <div>
+                <span class="rm-sku">{{ ln.sku }}</span>
+                <span class="rm-desc">{{ ln.descricao }}</span>
+            </div>
+            {% if ln.faltante > 0 %}<span class="rm-selo rm-selo-falta" role="alert">{{ ln.motivo }}</span>{% endif %}
+        </header>
+    </article>
+    {% endfor %}
+</div>

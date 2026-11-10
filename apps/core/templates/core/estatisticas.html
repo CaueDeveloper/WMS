@@ -40,9 +40,9 @@
             <h2 class="mb-1">Por produto</h2>
             <p class="text-xs text-slate-600">Maiores produtos em paletes criados.</p>
         </div>
-        <div class="inline-flex rounded border border-slate-300 overflow-hidden text-sm" role="group" aria-label="Métrica">
-            <button type="button" class="px-3 py-1.5 bg-primary-600 text-white" data-metrica="quantidades">Quantidade</button>
-            <button type="button" class="px-3 py-1.5 bg-white text-slate-700 hover:bg-slate-50" data-metrica="pesos">Peso (kg)</button>
+        <div class="inline-flex divide-x divide-slate-300 rounded border border-slate-300 overflow-hidden text-sm shadow-sm" role="group" aria-label="Métrica">
+            <button type="button" class="btn-segment btn-segment-ativo" aria-pressed="true" data-metrica="quantidades">Quantidade</button>
+            <button type="button" class="btn-segment" aria-pressed="false" data-metrica="pesos">Peso (kg)</button>
         </div>
     </div>
     <div class="relative mb-5" id="wrap-grafico-produto"><canvas id="grafico-produto" role="img" aria-label="Gráfico de barras: volume por produto. Os mesmos valores estão na tabela abaixo."></canvas></div>
@@ -160,10 +160,8 @@
             metrica = btn.dataset.metrica;
             document.querySelectorAll('[data-metrica]').forEach(function (b) {
                 var ativo = b === btn;
-                b.classList.toggle('bg-primary-600', ativo);
-                b.classList.toggle('text-white', ativo);
-                b.classList.toggle('bg-white', !ativo);
-                b.classList.toggle('text-slate-700', !ativo);
+                b.classList.toggle('btn-segment-ativo', ativo);
+                b.setAttribute('aria-pressed', ativo ? 'true' : 'false');
             });
             graficos.produto.data.datasets = datasetProduto(dados);
             graficos.produto.update();

@@ -12,5 +12,9 @@ class PerfilUsuario(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='perfil')
     atribuido_manualmente = models.BooleanField(default=True)
 
+    class Meta:
+        verbose_name = 'Perfil do Usuário'
+        verbose_name_plural = 'Perfil dos Usuários'
+
     def __str__(self):
         return self.user.username

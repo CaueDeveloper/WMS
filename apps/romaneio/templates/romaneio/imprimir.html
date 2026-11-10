@@ -1,0 +1,99 @@
+{% load static core_extras %}<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Romaneio {{ romaneio.pk }} — Café do Sítio</title>
+<style>
+    @page { size: A4; margin: 12mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 16px; font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #000; background: #fff; }
+    .folha { max-width: 190mm; margin: 0 auto; }
+    .barra { display: flex; gap: 8px; margin-bottom: 16px; }
+    .barra a, .barra button { padding: 8px 16px; border: 1px solid #334155; border-radius: 6px; background: #fff; color: #0f172a; font-size: 14px; text-decoration: none; cursor: pointer; }
+    .barra button { background: #0f172a; color: #fff; }
+    .cabecalho { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 10px; border-bottom: 2px solid #000; }
+    .marca { display: flex; align-items: center; gap: 12px; }
+    .marca img { height: 64px; width: auto; }
+    .marca strong { display: block; font-size: 18px; }
+    .marca span { color: #444; }
+    .titulo { text-align: right; }
+    .titulo h1 { margin: 0; font-size: 22px; }
+    .titulo p { margin: 2px 0 0; }
+    .dados { display: grid; grid-template-columns: repeat(3, 1fr); margin: 12px 0; border: 1px solid #000; }
+    .dados div { padding: 6px 8px; border-right: 1px solid #000; border-bottom: 1px solid #000; }
+    .dados div:nth-child(3n) { border-right: 0; }
+    .dados div:nth-last-child(-n+3) { border-bottom: 0; }
+    .dados small { display: block; color: #555; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+    .dados b { font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; }
+    thead { display: table-header-group; }
+    tfoot { display: table-footer-group; }
+    th, td { padding: 5px 8px; border: 1px solid #000; text-align: left; }
+    th { background: #e5e5e5; }
+    tr { break-inside: avoid; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .mono { font-family: Consolas, "Courier New", monospace; }
+    .assinaturas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 56px; break-inside: avoid; }
+    .assinaturas div { padding-top: 4px; border-top: 1px solid #000; text-align: center; }
+    .assinaturas small { display: block; color: #555; }
+    .recebido { margin-top: 28px; break-inside: avoid; }
+    .rodape { margin-top: 20px; color: #555; font-size: 10px; text-align: right; }
+    @media print {
+        body { padding: 0; }
+        .folha { max-width: none; }
+        .no-imprimir { display: none !important; }
+        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+</style>
+</head>
+<body>
+<div class="folha">
+    <div class="barra no-imprimir">
+        <a href="{% url 'romaneio:detalhe' romaneio.pk %}">Voltar</a>
+        <button type="button" onclick="window.print()">Imprimir</button>
+    </div>
+
+    <header class="cabecalho">
+        <div class="marca">
+            <img src="{% static 'core/img/familia-do-sitio.png' %}" alt="Café do Sítio">
+            <div><strong>Café do Sítio</strong><span>Expedição</span></div>
+        </div>
+        <div class="titulo">
+            <h1>Romaneio de Carga nº {{ romaneio.pk }}</h1>
+        </div>
+    </header>
+
+    <section class="dados">
+        <div><small>Notas fiscais</small><b>{% for n in romaneio.notas.all %}{{ n.docnum }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</b></div>
+        <div><small>Data</small><b>{{ romaneio.data|date:"d/m/Y" }}</b></div>
+        <div><small>Emitido por</small><b>{% firstof romaneio.criado_por.get_full_name romaneio.criado_por.username %}</b></div>
+        <div><small>Paletes / Peso total</small><b>{{ romaneio.itens.all|length }} / {{ romaneio.peso_total|peso }} kg</b></div>
+    </section>
+
+    <table>
+        <thead><tr><th style="width:32px">#</th><th>Produto</th><th>SKU</th><th>Palete</th><th class="num">Peso (kg)</th></tr></thead>
+        <tbody>
+            {% for item in romaneio.itens.all %}
+            <tr>
+                <td>{{ forloop.counter }}</td>
+                <td>{{ item.descricao }}</td>
+                <td>{{ item.sku }}</td>
+                <td class="mono">{{ item.retirada.palete.barcode_palete }}</td>
+                <td class="num">{{ item.peso_kg|peso }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot><tr><th colspan="4">Peso total</th><th class="num">{{ romaneio.peso_total|peso }} kg</th></tr></tfoot>
+    </table>
+
+    <section class="assinaturas">
+        <div>Conferente / Expedição<small>Data: ____/____/______</small></div>
+    </section>
+    <section class="recebido">Recebido por: ______________________________________ &nbsp; Data: ____/____/______</section>
+
+    <p class="rodape">Emitido em {{ emitido_em|date:"d/m/Y H:i" }}</p>
+</div>
+{% if auto %}<script>window.addEventListener('load', function () { window.print(); });</script>{% endif %}
+</body>
+</html>

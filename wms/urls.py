@@ -24,7 +24,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('accounts/login/', LoginView.as_view(authentication_form=LoginForm), name='login'),
     path('accounts/logout/', LogoutView.as_view(), name='logout'),
-    path('recebimento/', include('apps.recebimento.urls')),
-    path('estoque/', include('apps.estoque.urls')),
+    path('recebimento/', include('apps.producao.urls')),
+    path('estoque/', include('apps.logistica.urls')),
+    path('romaneio/', include('apps.romaneio.urls')),
     path('', include('apps.core.urls')),
 ]

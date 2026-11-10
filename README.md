@@ -10,7 +10,7 @@
 - Transferência Produção → Logística com bipagem e aprovação em lote por dois gestores
 - Reprovação, correção pelo Gestor e reimpressão de etiqueta quando peso/data mudam
 - Put-away com alocação nas primeiras posições livres, inclusive parcial
-- Mapa de estoque (1260 posições), consulta de palete/lote, plano de armazenagem, retirada
+- Mapa de estoque (1260 posições), consulta de palete/lote, retirada
 - Histórico completo de cada palete, relatórios de aprovação e estatísticas
 - Login pelo Active Directory; perfis geridos na tela Usuários
 
@@ -31,8 +31,8 @@
 ```
 wms/              projeto Django (settings, urls)
 apps/core/        login, grupos, menu (navegacao.py), home, estatísticas, usuários/AD
-apps/estoque/     Endereco, Produto, put-away, mapa, consultas, plano de armazenagem
-apps/recebimento/ Palete, PaleteHistorico, emissão, transferência, relatórios, ZPL
+apps/logistica/     Endereco, Produto, put-away, mapa, consultas
+apps/producao/ Palete, PaleteHistorico, emissão, transferência, relatórios, ZPL
 deploy/           HTTPS (cheroot), geração de certificado, Tailwind
 docs/             PRD e escopo
 ```
@@ -76,7 +76,6 @@ Suba com `python manage.py runserver 0.0.0.0:8000`, inclua o IP da máquina em `
 | Transferência Produção | `/recebimento/transferencia/` | Operador (bipa/reprova), Gestor Produção (aprova/corrige/reprova) |
 | Transferência Logística | `/recebimento/transferencia-logistica/` | Operador (bipa/reprova), Gestor Logística (aprova/reprova) |
 | Put-away | `/estoque/putaway/` | Operador Logística |
-| Plano de armazenagem | `/estoque/plano-armazenagem/` | Operador Logística |
 | Mapa de estoque / Consultas | `/estoque/mapa/`, `/estoque/consultar/` | Todos os operacionais (retirar: só Operador Logística) |
 | Estatísticas | `/estatisticas/` | Gestores e Administradores |
 | Usuários | `/usuarios/` | Administradores |
@@ -86,11 +85,11 @@ Administradores acessam tudo. Novos usuários de Produção/Logística nascem in
 ## Fluxo do palete
 
 ```
-CRIADO → EM_TRANSFERENCIA → CONFERIDO → EM_CONFERENCIA_LOGISTICA → CONFERIDO_LOGISTICA → ARMAZENADO → RETIRADO
-   ▲           (qualquer etapa anterior) → REPROVADO ── corrigir (Gestor Produção) ──┘ volta a CRIADO
+FABRICADO → TRANSFERENCIA_PRODUCAO → APROVADO_PRODUCAO → TRANSFERENCIA_LOGISTICA → APROVADO_LOGISTICA → ARMAZENADO → RETIRADO
+   ▲           (qualquer etapa anterior) → REPROVADO ── corrigir (Gestor Produção) ──┘ volta a FABRICADO
 ```
 
-`FINALIZADO` (sincronização no SAP) e a reautenticação por senha do Gestor estão **desabilitados** nesta versão.
+A sincronização no SAP (status `FINALIZADO`, removido) e a reautenticação por senha do Gestor estão **desabilitados** nesta versão.
 
 ## Regras importantes
 
@@ -102,7 +101,7 @@ CRIADO → EM_TRANSFERENCIA → CONFERIDO → EM_CONFERENCIA_LOGISTICA → CONFE
 
 ## Impressão ZPL
 
-`apps/recebimento/zpl.py`: o layout vive em `templates_zpl/etiqueta_palete.zpl` (placeholders `[[BARCODE]]`, `[[LOTE]]`, `[[PESO]]`, `[[DATA]]`, `[[HORA]]`); a etiqueta de endereço fica em `apps/estoque/templates_zpl/`. Teste a conexão com `python manage.py testar_impressora`.
+`apps/producao/zpl.py`: o layout vive em `templates_zpl/etiqueta_palete.zpl` (placeholders `[[BARCODE]]`, `[[LOTE]]`, `[[PESO]]`, `[[DATA]]`, `[[HORA]]`); a etiqueta de endereço fica em `apps/logistica/templates_zpl/`. Teste a conexão com `python manage.py testar_impressora`.
 
 ## Estado do projeto
 

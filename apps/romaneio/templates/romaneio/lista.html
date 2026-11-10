@@ -1,0 +1,36 @@
+{% extends 'core/_shell.html' %}
+{% load core_extras %}
+
+{% block title %}Romaneio — WMS{% endblock %}
+{% block titulo_pagina %}Romaneio{% endblock %}
+
+{% block shell_content %}
+<div class="flex items-center justify-between gap-3 mb-4">
+    <p class="text-sm text-slate-600">Romaneios de entrega criados pela Logística.</p>
+    {% if pode_gerir %}<a class="btn shrink-0 no-underline" href="{% url 'romaneio:novo' %}">{% include 'core/_icone.html' with nome='plus' classe='h-4 w-4' %}Novo romaneio</a>{% endif %}
+</div>
+
+{% if not romaneios %}
+    {% include 'core/_vazio.html' with texto='Nenhum romaneio criado.' %}
+{% else %}
+<div class="overflow-x-auto mb-4">
+    <table class="table-admin tabela-responsiva">
+        <thead>
+            <tr><th>Nº</th><th>Notas</th><th>Data</th><th>Criado por</th><th class="num">Peso (kg)</th></tr>
+        </thead>
+        <tbody>
+            {% for r in romaneios %}
+            <tr>
+                <td data-label="Nº"><div><a class="text-primary-700 underline-offset-2 hover:underline" href="{% url 'romaneio:detalhe' r.pk %}">{{ r.pk }}</a></div></td>
+                <td data-label="Notas"><div>{% for n in r.notas.all %}{{ n.docnum }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</div></td>
+                <td data-label="Data"><div>{{ r.data|date:"d/m/Y" }}</div></td>
+                <td data-label="Criado por"><div>{% firstof r.criado_por.get_full_name r.criado_por.username %}</div></td>
+                <td data-label="Peso (kg)" class="num"><div>{{ r.peso_total|peso }}</div></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% include 'core/_paginacao.html' with pagina=romaneios prefixo='?pg=' %}
+{% endif %}
+{% endblock %}

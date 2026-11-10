@@ -6,6 +6,11 @@
    JS por um checkbox oculto (#menu-toggle) + label/for. #}
 
 {% block content %}
+<style>
+    .menu-grupo > summary::-webkit-details-marker { display: none; }
+    .menu-grupo-seta { display: inline-flex; transition: transform .15s; }
+    .menu-grupo[open] > summary .menu-grupo-seta { transform: rotate(90deg); }
+</style>
 <div class="lg:flex min-h-screen">
     <input type="checkbox" id="menu-toggle" class="peer hidden">
 
@@ -24,26 +29,38 @@
         </div>
 
         <nav class="flex-1 overflow-y-auto py-3 text-sm" aria-label="Menu principal">
+            {# Grupos recolhíveis (<details>): só o da tela atual abre sozinho, para o menu não precisar de rolagem. #}
             {% for secao in menu_secoes %}
-                {% if secao.titulo %}<p class="mb-1 mt-5 px-5 text-xs font-semibold text-white/60">{{ secao.titulo }}</p>{% endif %}
-                {% for item in secao.itens %}
+                {% if secao.titulo %}
+                <details class="menu-grupo"{% if secao.aberta %} open{% endif %}>
+                    <summary class="nav-link cursor-pointer select-none" style="list-style: none;">
+                        {% include 'core/_icone.html' with nome=secao.icone %}<span class="flex-1">{{ secao.titulo }}</span>
+                        <span class="menu-grupo-seta">{% include 'core/_icone.html' with nome='chevron' classe='h-4 w-4' %}</span>
+                    </summary>
+                    {% for item in secao.itens %}
+                        <a href="{{ item.url }}" class="nav-link{% if item.ativo %} nav-link-ativo{% endif %}" style="min-height: 2.25rem; padding-left: 2.75rem;"{% if item.ativo %} aria-current="page"{% endif %}>{{ item.rotulo }}</a>
+                    {% endfor %}
+                </details>
+                {% else %}
+                    {% for item in secao.itens %}
                     <a href="{{ item.url }}" class="nav-link{% if item.ativo %} nav-link-ativo{% endif %}"{% if item.ativo %} aria-current="page"{% endif %}>
                         {% include 'core/_icone.html' with nome=item.icone %}{{ item.rotulo }}
                     </a>
-                {% endfor %}
+                    {% endfor %}
+                {% endif %}
             {% endfor %}
         </nav>
 
         <form method="post" action="{% url 'logout' %}" class="border-t border-white/10 p-3">
             {% csrf_token %}
-            <button type="submit" class="flex min-h-11 w-full items-center gap-3 rounded px-2 text-sm text-white/85 transition-colors hover:bg-white/10 hover:text-white">
+            <button type="submit" class="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-sm text-white/85 transition-colors hover:bg-white/10 hover:text-white">
                 {% include 'core/_icone.html' with nome='logout' %}Sair
             </button>
         </form>
     </aside>
 
     <div class="flex min-w-0 flex-1 flex-col">
-        <header class="sticky top-0 z-20 flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-2.5 lg:px-6">
+        <header class="sticky top-0 z-20 flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-2.5 shadow-card lg:px-6">
             <label for="menu-toggle" class="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded text-slate-700 hover:bg-slate-100 lg:hidden" aria-label="Abrir menu">
                 {% include 'core/_icone.html' with nome='menu' classe='h-6 w-6' %}
             </label>
@@ -56,7 +73,7 @@
                     <div class="text-sm font-medium text-slate-800">{{ usuario_nome }}</div>
                     <div class="max-w-48 truncate text-xs text-slate-600">{{ usuario_perfil }}</div>
                 </div>
-                <span class="flex h-9 w-9 items-center justify-center rounded-full bg-primary-100 text-sm font-semibold text-primary-700" aria-hidden="true">{{ usuario_iniciais }}</span>
+                <span class="flex h-9 w-9 items-center justify-center rounded-full bg-primary-600 text-sm font-semibold text-white shadow-card" aria-hidden="true">{{ usuario_iniciais }}</span>
             </div>
         </header>
 

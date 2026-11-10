@@ -1,0 +1,11 @@
+{# Estilo da "ficha" de dados (rótulo pequeno em cima, valor embaixo). Use com <dl class="ficha">. #}
+<style>
+.ficha{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));gap:1px;margin:0;overflow:hidden;border-radius:1rem;border:1px solid var(--color-primary-100,#d7e8e3);background:var(--color-primary-100,#d7e8e3);box-shadow:0 1px 2px rgba(14,38,34,.06)}
+.ficha-item{display:grid;align-content:start;gap:.2rem;padding:.8rem 1rem;background:#fff}
+.ficha-item.largo{grid-column:1/-1;background:var(--color-primary-50,#eef5f3)}
+.ficha dt{margin:0;font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--color-primary-400,#57937f)}
+.ficha dd{margin:0;font-size:.95rem;font-weight:600;color:var(--color-primary-800,#13312c);word-break:break-word}
+.ficha-item.largo dd{font-size:1.1rem}
+.ficha dd.mono{font-family:ui-monospace,monospace}
+.ficha dd small{display:block;margin-top:.1rem;font-size:.75rem;font-weight:400;color:#64748b}
+</style>

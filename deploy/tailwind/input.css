@@ -29,7 +29,18 @@
   --color-danger-500: #ad3b2c;
   --color-danger-600: #8c3024;
 
-  --radius-DEFAULT: 6px;
+  /* Informativo (azul dessaturado): hover de linhas, destaques neutros que não são estado. */
+  --color-info-50: #eaf1f6;
+  --color-info-500: #3b6f93;
+  --color-info-600: #2f5a77;
+
+  /* Fundo da página: neutro com leve toque esverdeado, combina com o verde de marca. */
+  --color-canvas: #f4f7f6;
+
+  --radius-DEFAULT: 8px;
+  --radius-lg: 12px;
+  --shadow-card: 0 1px 2px rgb(14 38 34 / 0.06), 0 1px 3px rgb(14 38 34 / 0.05);
+  --shadow-pop: 0 10px 30px -8px rgb(14 38 34 / 0.25), 0 2px 6px rgb(14 38 34 / 0.08);
   --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
@@ -38,7 +49,9 @@
  *   - primary-{50..900}: verde de marca (#1d4e45 = primary-600)
  *   - success/warning/danger-{50,500,600}: estados semânticos
  *   - slate-*: neutros (fundo, texto secundário, bordas) — escala nativa do Tailwind
- *   - rounded (DEFAULT): 6px, padrão em todo o projeto
+ *   - info-{50,500,600}: azul dessaturado (destaques neutros); canvas: fundo da página
+ *   - rounded (DEFAULT): 8px para controles; rounded-lg 12px para cartões e modais
+ *   - shadow-card / shadow-pop: elevação suave de cartões / de modais e menus
  *
  * Duas densidades de UI, por convenção de uso de classes (não por token separado):
  *   - "coletor" (telas do Zebra MC2700): texto e alvos de toque grandes — text-lg/xl, py-3/4
@@ -47,7 +60,7 @@
 
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-800 font-sans antialiased tabular-nums;
+    @apply bg-canvas text-slate-800 font-sans antialiased tabular-nums;
     touch-action: manipulation;
   }
   h1 {
@@ -90,11 +103,11 @@
 @layer components {
   /* Navegação da sidebar */
   .nav-link {
-    @apply flex min-h-11 items-center gap-3 px-5 py-2 text-white/85 border-l-4 border-transparent
+    @apply mx-3 flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-white/85
            transition-colors duration-150 hover:bg-white/10 hover:text-white;
   }
   .nav-link-ativo {
-    @apply bg-white/10 text-white font-semibold border-l-4 border-white;
+    @apply bg-white/15 text-white font-semibold shadow-[inset_3px_0_0_0_#fff];
   }
   .nav-icon {
     @apply inline-flex items-center justify-center w-5 shrink-0 text-base leading-none;
@@ -102,9 +115,42 @@
 
   /* Botões */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded px-4 py-2 text-sm font-medium
-           bg-primary-600 text-white transition-colors duration-150
-           hover:bg-primary-700 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed;
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded border border-transparent px-4 py-2
+           text-center text-sm font-semibold leading-tight bg-primary-600 text-white shadow-sm
+           transition-colors duration-150 hover:bg-primary-700 active:bg-primary-800
+           disabled:border-transparent disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none disabled:cursor-not-allowed;
+  }
+  .btn-sm {
+    @apply min-h-8 px-3 py-1.5 text-xs;
+  }
+  .btn-ghost {
+    @apply bg-transparent text-primary-700 shadow-none hover:bg-primary-50 active:bg-primary-100;
+  }
+  .btn-danger-solid {
+    @apply bg-danger-600 text-white hover:bg-danger-500 active:bg-danger-600;
+  }
+  /* Controle segmentado (ex.: período nas estatísticas) */
+  .btn-segment {
+    @apply inline-flex min-h-9 items-center justify-center px-3.5 py-1.5 text-sm font-medium bg-white text-slate-700
+           transition-colors duration-150 hover:bg-primary-50;
+  }
+  .btn-segment-ativo {
+    @apply bg-primary-600 text-white hover:bg-primary-600;
+  }
+
+  /* Densidade "coletor → desktop": grande e de largura total no celular/Zebra, compacto em lg.
+     Substituem os utilitários repetidos (max-lg:min-h-12, lg:!text-sm...) nos templates. */
+  .btn-coletor {
+    @apply max-lg:min-h-12 max-lg:w-full max-lg:text-base;
+  }
+  .btn-coletor-lg {
+    @apply flex w-full min-h-12 text-lg py-3.5 px-6 lg:inline-flex lg:w-auto lg:min-h-10 lg:text-sm lg:py-2 lg:px-4;
+  }
+  .input-coletor {
+    @apply text-lg py-3 px-4 lg:text-sm lg:py-2 lg:px-3;
+  }
+  .texto-coletor {
+    @apply text-base lg:text-sm;
   }
   .btn-block {
     @apply flex w-full;
@@ -113,10 +159,11 @@
     @apply text-lg py-3.5 px-6;
   }
   .btn-secondary {
-    @apply bg-white text-primary-700 border border-slate-300 hover:bg-slate-50;
+    @apply bg-white text-primary-700 border-slate-300 hover:bg-primary-50 hover:border-primary-300 active:bg-primary-100
+           disabled:border-slate-200 disabled:bg-slate-100;
   }
   .btn-danger {
-    @apply bg-white text-danger-600 border border-danger-500 hover:bg-danger-50;
+    @apply bg-white text-danger-600 border-danger-500 hover:bg-danger-50 active:bg-danger-50;
   }
   /* Seta que esconde/mostra os paletes de um lote */
   .btn-seta {
@@ -134,42 +181,76 @@
   }
 
   /* Lista suspensa "Ação" das tabelas (Aprovar / Reprovar / Editar) */
-  .select-acao {
-    @apply block w-36 rounded border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800
+  /* Campos de formulário: input, select e textarea compartilham o mesmo visual. O select
+     troca a seta nativa por uma própria, para ficar igual em todos os navegadores. */
+  .input-field, .select-acao {
+    @apply block min-h-10 w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm
+           transition-colors duration-150 placeholder:text-slate-400 hover:border-slate-400
            focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500
-           max-lg:min-h-12 max-lg:w-full max-lg:text-base;
+           disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 disabled:shadow-none
+           read-only:bg-slate-50 user-invalid:border-danger-500 user-invalid:ring-danger-500/20;
   }
-
-  /* Campos de formulário */
-  .input-field {
-    @apply block w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800
-           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500;
+  select.input-field, select.select-acao {
+    @apply appearance-none bg-no-repeat pr-9;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2364748b'%3E%3Cpath fill-rule='evenodd' d='M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z' clip-rule='evenodd'/%3E%3C/svg%3E");
+    background-position: right 0.6rem center;
+    background-size: 1.25rem;
+  }
+  /* Lista suspensa "Ação" das tabelas (Aprovar / Reprovar / Editar) */
+  .select-acao {
+    @apply w-36 py-1.5 max-lg:min-h-12 max-lg:w-full max-lg:text-base;
   }
   .input-field-lg {
     @apply text-lg py-3 px-4;
   }
+  .field-hint {
+    @apply mt-1 text-xs text-slate-600;
+  }
+  .field-error {
+    @apply mt-1 text-xs font-medium text-danger-600;
+  }
+
+  /* Cabeçalho de página: título à esquerda, ações à direita, centralizados na vertical. */
+  .page-header {
+    @apply mb-5 flex flex-wrap items-center justify-between gap-3;
+  }
+  .page-header h2 {
+    @apply m-0 text-xl text-slate-900;
+  }
+  .page-container {
+    @apply mx-auto w-full max-w-6xl;
+  }
+
+  /* Itens de menu suspenso (ações por linha) */
+  .menu-item {
+    @apply flex min-h-10 w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700
+           transition-colors duration-150 hover:bg-primary-50 hover:text-primary-700;
+  }
+  .menu-item-danger {
+    @apply text-danger-600 hover:bg-danger-50 hover:text-danger-600;
+  }
 
   /* Cartões */
   .card {
-    @apply bg-white border border-slate-200 border-l-4 border-l-primary-600 rounded p-4 mb-4;
+    @apply bg-white border border-slate-200 border-l-4 border-l-primary-600 rounded-lg p-4 mb-4 shadow-card;
   }
   .card-plain {
-    @apply bg-white border border-slate-200 rounded p-4;
+    @apply bg-white border border-slate-200 rounded-lg p-4 shadow-card;
   }
 
   /* Formulário em cartão (padrão de todas as telas com campos): cabeçalho verde,
      corpo com campos empilhados e rodapé com a ação principal. */
   .form-card {
-    @apply bg-white border border-slate-200 rounded-lg shadow-md overflow-hidden;
+    @apply bg-white border border-slate-200 rounded-lg shadow-card overflow-hidden;
   }
   .form-card-header-logo {
     @apply py-6 text-center;
   }
   .form-card-header {
-    @apply bg-primary-600 px-6 py-4;
+    @apply bg-linear-to-b from-primary-600 to-primary-700 px-6 py-4;
   }
   .form-card-title {
-    @apply text-lg font-semibold text-white tracking-wide;
+    @apply m-0 text-lg font-semibold text-white;
   }
   .form-card-subtitle {
     @apply text-sm text-white/80 mt-1;
@@ -201,6 +282,10 @@
   .barra-form .form-card-footer {
     @apply lg:border-0 lg:bg-transparent lg:p-0;
   }
+  /* Variante que ocupa a largura toda da tela, com o campo centralizado dentro do cartão */
+  .barra-form-cheia .form-card-body > div {
+    @apply lg:mx-auto lg:w-full lg:max-w-md lg:flex-none lg:text-center;
+  }
   /* Variante que se ajusta ao conteúdo em vez de ocupar a largura toda */
   .barra-form-compacta {
     @apply lg:w-fit lg:py-3;
@@ -212,13 +297,13 @@
   /* <dialog> com formulário: pop-up centralizado em tela grande; no celular fica sempre
      aberto, inline na página (como era antes do pop-up existir). */
   .dialog-form {
-    @apply fixed inset-0 m-auto h-fit max-h-[90vh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-lg p-0 shadow-xl backdrop:bg-slate-900/50
+    @apply fixed inset-0 m-auto h-fit max-h-[90vh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-lg p-0 shadow-pop backdrop:bg-primary-900/50 backdrop:backdrop-blur-[2px]
            max-lg:static max-lg:block max-lg:m-0 max-lg:w-full max-lg:max-w-none max-lg:overflow-visible max-lg:bg-transparent max-lg:shadow-none;
   }
 
   /* <dialog> modal centralizado com .form-card dentro (tela Usuários). */
   .dialog-modal {
-    @apply fixed inset-0 m-auto h-fit max-h-[90vh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-lg p-0 shadow-xl backdrop:bg-slate-900/50;
+    @apply fixed inset-0 m-auto h-fit max-h-[90vh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-lg p-0 shadow-pop backdrop:bg-primary-900/50 backdrop:backdrop-blur-[2px];
   }
 
   /* Selos / badges de status */
@@ -233,6 +318,10 @@
   .badge-warning {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide
            bg-warning-50 text-warning-600 border border-warning-500;
+  }
+  .badge-neutral {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide
+           bg-slate-100 text-slate-700 border border-slate-400;
   }
 
   /* Alertas */
@@ -255,19 +344,19 @@
     @apply border-0 border-b border-slate-200 px-3 py-2.5 text-left align-middle;
   }
   .table-admin th {
-    @apply bg-slate-100 text-slate-700 font-semibold whitespace-nowrap border-slate-300 sticky top-0 z-10;
+    @apply bg-primary-50 text-primary-800 text-xs font-semibold uppercase tracking-wide whitespace-nowrap border-primary-200 sticky top-0 z-10;
   }
   .table-admin tbody tr:last-child td {
     @apply border-b-0;
   }
   .table-admin tbody tr:hover td {
-    @apply bg-slate-50;
+    @apply bg-primary-50/60;
   }
   .table-admin .num {
     @apply text-right;
   }
   .overflow-x-auto:has(> .table-admin) {
-    @apply rounded-lg border border-slate-200 bg-white;
+    @apply rounded-lg border border-slate-200 bg-white shadow-card;
   }
 
   /* Tabela que no celular/coletor vira uma lista de cartões (um por linha). Cada <td>
@@ -300,6 +389,57 @@
     }
     .overflow-x-auto:has(> .tabela-responsiva) {
       @apply rounded-none border-0 bg-transparent;
+    }
+  }
+
+  /* Tela de transferência: grade estilo planilha (células com divisórias, cabeçalho
+     escuro, linhas zebradas) com colunas de largura fixa que não "pulam" ao expandir/recolher. */
+  @media (min-width: 1024px) {
+    .tabela-transferencia {
+      table-layout: fixed;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+    .tabela-transferencia th, .tabela-transferencia td {
+      @apply break-words border-b border-r border-slate-200 px-3 py-2;
+    }
+    .tabela-transferencia th:last-child, .tabela-transferencia td:last-child {
+      @apply border-r-0;
+    }
+    .tabela-transferencia thead th {
+      @apply bg-primary-800 border-primary-700 text-xs uppercase tracking-wide text-primary-50;
+    }
+    .tabela-transferencia tbody tr:last-child td {
+      @apply border-b border-slate-200;
+    }
+    .tabela-transferencia tr[data-lote-cabecalho] td {
+      @apply border-r-0 border-y border-slate-300 bg-slate-100 py-2.5;
+    }
+    .tabela-transferencia tr[data-linha-palete]:nth-of-type(even) td {
+      @apply bg-slate-50;
+    }
+    .tabela-transferencia tr[data-linha-palete]:hover td {
+      @apply bg-info-50;
+    }
+    .tabela-transferencia tr[data-linha-palete].bg-red-50 td {
+      @apply bg-danger-50;
+    }
+    .tabela-transferencia th:nth-child(4), .tabela-transferencia td:nth-child(4),
+    .tabela-transferencia th:nth-child(6), .tabela-transferencia td:nth-child(6),
+    .tabela-transferencia th:nth-child(7), .tabela-transferencia td:nth-child(7) {
+      @apply text-center;
+    }
+    .tabela-transferencia td.num {
+      @apply font-medium tabular-nums;
+    }
+    .tabela-transferencia .col-lote { width: 11%; }
+    .tabela-transferencia .col-palete { width: 18%; }
+    .tabela-transferencia .col-fabricacao { width: 11%; }
+    .tabela-transferencia .col-peso { width: 10%; }
+    .tabela-transferencia .col-bipados { width: 11%; }
+    .tabela-transferencia .col-acao { width: 12%; }
+    .overflow-x-auto:has(> .tabela-transferencia) {
+      @apply rounded-xl border-slate-300 shadow-sm;
     }
   }
 

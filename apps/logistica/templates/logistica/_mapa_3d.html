@@ -1,0 +1,59 @@
+{% load static %}
+{# Mapa de Estoque 3D (three.js servido localmente). Dados via mapa_estoque_dados, respeitando os filtros atuais. #}
+{% if not selecao %}
+<div class="mb-3 flex flex-wrap justify-center gap-4 text-xs text-slate-600">
+    <span class="inline-flex items-center gap-1.5"><span class="inline-block h-4 w-4 rounded border border-slate-300" style="background:#34d399"></span> Livre</span>
+    <span class="inline-flex items-center gap-1.5"><span class="inline-block h-4 w-4 rounded border border-slate-300" style="background:#e11d48"></span> Ocupado</span>
+    <span class="inline-flex items-center gap-1.5"><span class="inline-block h-4 w-4 rounded border border-slate-300" style="background:#cbd5e1"></span> Inativo</span>
+    <span class="inline-flex items-center gap-1.5"><span class="inline-block h-4 w-4 rounded border border-slate-300" style="background:#f59e0b"></span> Selecionado / encontrado</span>
+</div>
+{% endif %}
+
+{% if not selecao %}
+<div class="mb-3 flex flex-wrap items-center gap-2">
+    <form id="mapa3d-busca-form" class="flex items-center gap-2" role="search">
+        <label for="mapa3d-busca" class="sr-only">Buscar endereço, SKU ou palete</label>
+        <input id="mapa3d-busca" type="search" placeholder="Endereço, SKU ou palete" autocomplete="off"
+               class="min-h-10 w-60 rounded border border-slate-300 px-3 text-sm">
+        <button type="submit" class="btn btn-secondary min-h-10 px-4">Localizar</button>
+        <span id="mapa3d-busca-msg" class="text-sm text-slate-600" role="status"></span>
+    </form>
+    <div class="ml-auto inline-flex gap-1" role="group" aria-label="Posição da câmera">
+        <button type="button" data-camera="iso" class="btn btn-secondary min-h-10 px-3">Isométrica</button>
+        <button type="button" data-camera="topo" class="btn btn-secondary min-h-10 px-3">Topo</button>
+        <button type="button" data-camera="frontal" class="btn btn-secondary min-h-10 px-3">Frontal</button>
+        <button type="button" data-camera="lateral" class="btn btn-secondary min-h-10 px-3">Lateral</button>
+    </div>
+</div>
+{% endif %}
+
+{% if selecao %}<div id="mapa3d-legenda" hidden aria-label="Legenda de cores por produto" class="mb-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-700"></div>{% endif %}
+
+<div id="mapa3d" data-url="{% if url_dados %}{{ url_dados }}{% else %}{% url 'logistica:mapa_estoque_dados' %}{% endif %}"{% if corredor_filtro %} data-query="?corredor={{ corredor_filtro|urlencode }}"{% elif selecao %} data-query=""{% endif %}{% if selecao %} data-selecao data-marcados="{{ marcados }}"{% endif %}{% if destacar %} data-destacar="{{ destacar }}"{% endif %}
+     class="relative h-[70vh] min-h-96 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+    <canvas id="mapa3d-canvas" class="block h-full w-full touch-none" aria-label="Mapa 3D do armazém" role="img"></canvas>
+
+    <p id="mapa3d-carregando" class="absolute inset-0 flex items-center justify-center text-sm text-slate-600">Carregando mapa 3D…</p>
+    <div id="mapa3d-dica" hidden class="pointer-events-none absolute z-10 rounded bg-slate-900/90 px-2.5 py-1.5 text-xs text-white"></div>
+
+    <aside id="mapa3d-detalhe" hidden class="absolute right-3 top-3 z-10 w-64 rounded-lg border border-slate-200 bg-white p-3 shadow-lg" aria-live="polite">
+        <button type="button" data-fechar class="absolute right-2 top-2 min-h-8 min-w-8 text-slate-500 hover:text-slate-900" aria-label="Fechar detalhes">✕</button>
+        <div data-conteudo></div>
+    </aside>
+
+    <div id="mapa3d-fallback" hidden class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white p-6 text-center">
+        <p class="text-slate-700">O mapa 3D não pôde ser exibido. <span data-motivo></span></p>
+        {% if not corredor_filtro and not selecao %}<a class="btn" href="?visao=andares">Usar a visão por andares</a>{% endif %}
+    </div>
+</div>
+{% if not selecao %}<p class="mt-2 text-xs text-slate-500">Arraste para girar, role/pince para ampliar, botão direito (ou dois dedos) para mover. Toque em uma posição para ver os detalhes.</p>{% endif %}
+
+<noscript><p class="mt-2 text-sm text-slate-700">É preciso habilitar JavaScript para o mapa 3D.{% if not corredor_filtro and not selecao %} <a href="?visao=andares">Usar a visão por andares</a>.{% endif %}</p></noscript>
+
+<script type="importmap">
+{ "imports": {
+    "three": "{% static 'core/js/three/three.module.min.js' %}",
+    "three-addons/OrbitControls.js": "{% static 'core/js/three/addons/OrbitControls.js' %}"
+} }
+</script>
+<script type="module" src="{% static 'logistica/js/mapa3d.js' %}"></script>

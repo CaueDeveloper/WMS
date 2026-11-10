@@ -1,6 +1,7 @@
 """Cadastro único das telas do sistema: alimenta o menu lateral e os atalhos
 da tela inicial, com a regra de quem pode ver cada uma. Ao criar uma tela
-nova, basta acrescentar um `ItemMenu` aqui."""
+nova, basta acrescentar um `ItemMenu` aqui; `secao` é o grupo (submenu) do
+menu lateral: Produção, Logística, Consultar ou Usuários (vazio = item solto)."""
 from dataclasses import dataclass
 
 from django.urls import reverse
@@ -13,6 +14,12 @@ GESTOR_LOG = 'Gestor Logística'
 
 TODOS_OPERACIONAIS = (ADM, OP_PROD, OP_LOG, GESTOR_PROD, GESTOR_LOG)
 
+PRODUCAO = 'Produção'
+LOGISTICA = 'Logística'
+CONSULTAR = 'Consultar'
+USUARIOS = 'Usuários'
+ICONES_SECAO = {PRODUCAO: 'tag', LOGISTICA: 'archive', CONSULTAR: 'search', USUARIOS: 'users'}
+
 
 @dataclass(frozen=True)
 class ItemMenu:
@@ -22,58 +29,75 @@ class ItemMenu:
     grupos: tuple
     secao: str = ''
     descricao: str = ''
-    modo: str = ''  # só "Consultar": distingue Palete/Lote/Endereço pela querystring
+    query: str = ''  # querystring que distingue telas com a mesma view (modo=lote, papel=gestor, tipo=motorista)
     relacionadas: tuple = ()  # telas filhas que mantêm este item destacado
 
     @property
     def url(self):
         base = reverse(self.view_name)
-        return f'{base}?modo={self.modo}' if self.modo else base
+        return f'{base}?{self.query}' if self.query else base
 
 
 ITENS_MENU = (
     ItemMenu('Início', 'home', 'home', (), secao=''),
     ItemMenu(
-        'Produção', 'tag', 'recebimento:novo', (ADM, OP_PROD), secao='Operação',
+        'Produção', 'tag', 'producao:novo', (ADM, OP_PROD, GESTOR_PROD), secao=PRODUCAO,
         descricao='Emitir etiquetas e acompanhar os últimos paletes criados.',
     ),
     ItemMenu(
-        'Transferência: Produção', 'transfer', 'recebimento:transferencia_gestor', (ADM, OP_PROD, GESTOR_PROD),
-        secao='Operação', descricao='Bipar paletes e aprovar o lote para a Logística.',
-        relacionadas=('recebimento:relatorio_aprovacao_producao',),
+        'Estatísticas de Produção', 'chart-bar', 'producao:estatisticas', (ADM, GESTOR_PROD), secao=PRODUCAO,
+        descricao='Ordens de produção dos últimos 30 dias e estoque disponível (SAP).',
     ),
     ItemMenu(
-        'Transferência: Logística', 'transfer', 'recebimento:transferencia_logistica', (ADM, OP_LOG, GESTOR_LOG),
-        secao='Operação', descricao='Conferir o recebimento do lote na Logística.',
+        'Transferência: Produção', 'transfer', 'producao:transferencia_gestor', (ADM, OP_PROD, GESTOR_PROD),
+        secao=PRODUCAO, descricao='Bipar paletes e aprovar o lote para a Logística.',
+        relacionadas=('producao:relatorio_aprovacao_producao',),
     ),
     ItemMenu(
-        'Armazenagem', 'archive', 'estoque:putaway', (ADM, OP_LOG), secao='Operação',
+        'Transferência: Logística', 'transfer', 'producao:transferencia_logistica', (ADM, OP_LOG, GESTOR_LOG),
+        secao=LOGISTICA, descricao='Conferir o recebimento do lote na Logística.',
+    ),
+    ItemMenu(
+        'Armazenagem', 'archive', 'logistica:putaway', (ADM, OP_LOG, GESTOR_LOG), secao=LOGISTICA,
         descricao='Guardar os paletes recebidos nos endereços livres.',
     ),
     ItemMenu(
-        'Plano de Armazenagem', 'pin', 'estoque:plano_armazenagem', (ADM, OP_LOG), secao='Operação',
-        descricao='Ver o caminho até o endereço de um palete.',
+        'Romaneio', 'archive', 'romaneio:lista', (ADM, OP_LOG, GESTOR_LOG), secao=LOGISTICA,
+        descricao='Montar o romaneio de entrega com as retiradas de palete.',
+        relacionadas=('romaneio:novo', 'romaneio:detalhe'),
     ),
     ItemMenu(
-        'Mapa de Estoque', 'map', 'estoque:mapa_estoque', (ADM, GESTOR_PROD, GESTOR_LOG), secao='Consulta',
+        'Etiquetas de corredor', 'tag', 'logistica:etiquetas_corredor', (ADM,), secao=LOGISTICA,
+        descricao='Gerar e imprimir a etiqueta de cada corredor.',
+    ),
+    ItemMenu(
+        'Mapa de Estoque', 'map', 'logistica:mapa_estoque', (ADM, GESTOR_PROD, GESTOR_LOG), secao=CONSULTAR,
         descricao='Ocupação por andar, corredor e guarda.',
-        relacionadas=('estoque:inspecionar_palete',),
+        relacionadas=('logistica:inspecionar_palete',),
     ),
     ItemMenu(
-        'Consultar palete', 'search', 'estoque:consultar_palete', TODOS_OPERACIONAIS, secao='Consulta',
-        descricao='Situação e histórico de um palete.', modo='palete',
+        'Consultar palete', 'search', 'logistica:consultar_palete', TODOS_OPERACIONAIS, secao=CONSULTAR,
+        descricao='Situação e histórico de um palete.', query='modo=palete',
     ),
     ItemMenu(
-        'Consultar lote', 'search', 'estoque:consultar_palete', TODOS_OPERACIONAIS, secao='Consulta',
-        descricao='Todos os paletes de um lote.', modo='lote',
+        'Consultar lote', 'search', 'logistica:consultar_palete', TODOS_OPERACIONAIS, secao=CONSULTAR,
+        descricao='Todos os paletes de um lote.', query='modo=lote',
     ),
     ItemMenu(
-        'Estatísticas', 'chart-bar', 'estatisticas', (ADM, GESTOR_PROD, GESTOR_LOG), secao='Consulta',
+        'Consultar corredor', 'pin', 'logistica:consultar_palete', TODOS_OPERACIONAIS, secao=CONSULTAR,
+        descricao='Bipe o QR do corredor e veja a ocupação.', query='modo=corredor',
+    ),
+    ItemMenu(
+        'Operadores', 'users', 'usuarios', (ADM,), secao=USUARIOS,
+        descricao='Cadastrar operadores e definir perfis de acesso.', query='papel=operador',
+    ),
+    ItemMenu(
+        'Gestores', 'users', 'usuarios', (ADM,), secao=USUARIOS,
+        descricao='Cadastrar gestores e definir perfis de acesso.', query='papel=gestor',
+    ),
+    ItemMenu(
+        'Estatísticas', 'chart-bar', 'estatisticas', (ADM, GESTOR_PROD, GESTOR_LOG), secao='',
         descricao='Volumes e produtividade por período.',
-    ),
-    ItemMenu(
-        'Usuários', 'users', 'usuarios', (ADM,), secao='Administração',
-        descricao='Cadastrar usuários e definir perfis de acesso.',
     ),
 )
 
@@ -101,16 +125,20 @@ def _ativo(item, request):
         return False
     if match.view_name != item.view_name and match.view_name not in item.relacionadas:
         return False
-    return not item.modo or request.GET.get('modo') == item.modo
+    chave, _, valor = item.query.partition('=')
+    return not item.query or request.GET.get(chave) == valor
 
 
 def menu_para(request):
-    """Menu lateral agrupado por seção, só com o que o usuário pode abrir."""
-    secoes = []
+    """Menu lateral: itens soltos (Início) e grupos recolhíveis (Produção,
+    Logística, Consultar, Usuários) só com o que o usuário pode abrir. O grupo da
+    tela atual vem `aberta`; os demais ficam recolhidos."""
+    secoes = {}
     for item in itens_permitidos(request.user):
-        if not secoes or secoes[-1]['titulo'] != item.secao:
-            secoes.append({'titulo': item.secao, 'itens': []})
-        secoes[-1]['itens'].append({
-            'rotulo': item.rotulo, 'icone': item.icone, 'url': item.url, 'ativo': _ativo(item, request),
+        secao = secoes.setdefault(item.secao, {
+            'titulo': item.secao, 'icone': ICONES_SECAO.get(item.secao, ''), 'itens': [], 'aberta': False,
         })
-    return secoes
+        ativo = _ativo(item, request)
+        secao['aberta'] = secao['aberta'] or ativo
+        secao['itens'].append({'rotulo': item.rotulo, 'icone': item.icone, 'url': item.url, 'ativo': ativo})
+    return list(secoes.values())

@@ -1,0 +1,63 @@
+{# Barra de controles do Mapa de Estoque: visão + modo (topo) e filtros (base). #}
+<div class="mb-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="flex flex-wrap items-center justify-between gap-3 p-3">
+        <nav class="flex gap-1 overflow-x-auto" aria-label="Visão do mapa">
+            {% for v in visoes %}
+                <a href="{{ v.url }}"
+                   class="inline-flex min-h-11 items-center gap-2 whitespace-nowrap rounded px-3.5 text-sm font-medium no-underline transition-colors duration-150 {% if v.ativo %}bg-primary-600 text-white{% else %}text-slate-700 hover:bg-slate-100{% endif %}"
+                   {% if v.ativo %}aria-current="page"{% endif %}>
+                    {% if modo == 'simples' %}{% include 'core/_icone.html' with nome=v.icone %}{% endif %}{{ v.rotulo }}
+                </a>
+            {% endfor %}
+        </nav>
+        <div class="flex items-center gap-2 text-sm text-slate-600" role="group" aria-label="Modo de exibição">
+            <span>Exibição</span>
+            <div class="inline-flex rounded border border-slate-300 p-0.5">
+                {% for m in modos %}
+                    <a href="{{ m.url }}" {% if m.ativo %}aria-current="true"{% endif %}
+                       class="inline-flex min-h-10 items-center rounded px-3 text-sm no-underline transition-colors duration-150 {% if m.ativo %}bg-slate-800 font-semibold text-white{% else %}text-slate-700 hover:bg-slate-100{% endif %}">{{ m.rotulo }}</a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <form method="get" class="flex flex-wrap items-end gap-x-6 gap-y-3 border-t border-slate-200 bg-slate-50 p-3" aria-label="Filtros do mapa">
+        <input type="hidden" name="visao" value="{{ visao }}">
+        <input type="hidden" name="modo" value="{{ modo }}">
+        {% if modo == 'simples' %}
+            {% if filtros.andar %}<input type="hidden" name="andar" value="{{ filtros.andar }}">{% endif %}
+            {% if filtros.nivel %}<input type="hidden" name="nivel" value="{{ filtros.nivel }}">{% endif %}
+
+            <div role="group" aria-labelledby="rot-andar">
+                <span id="rot-andar" class="mb-1 block text-sm font-semibold text-slate-700">Andar</span>
+                {% include 'logistica/_mapa_segmentos.html' with opcoes=opcoes_andar %}
+            </div>
+            <div role="group" aria-labelledby="rot-nivel">
+                <span id="rot-nivel" class="mb-1 block text-sm font-semibold text-slate-700">Ocupação</span>
+                {% include 'logistica/_mapa_segmentos.html' with opcoes=opcoes_nivel pontos=True %}
+            </div>
+            {% include 'logistica/_mapa_filtro_select.html' with nome='corredor' titulo='Corredor' opcoes=opcoes_corredor auto=True %}
+            {% include 'logistica/_mapa_filtro_select.html' with nome='guarda' titulo='Guarda' opcoes=opcoes_guarda auto=True %}
+            <noscript><button type="submit" class="btn btn-secondary min-h-11 px-4">Aplicar</button></noscript>
+        {% else %}
+            {% include 'logistica/_mapa_filtro_select.html' with nome='andar' titulo='Andar' opcoes=opcoes_andar %}
+            {% include 'logistica/_mapa_filtro_select.html' with nome='nivel' titulo='Ocupação' opcoes=opcoes_nivel %}
+            {% include 'logistica/_mapa_filtro_select.html' with nome='corredor' titulo='Corredor' opcoes=opcoes_corredor %}
+            {% include 'logistica/_mapa_filtro_select.html' with nome='guarda' titulo='Guarda' opcoes=opcoes_guarda %}
+            <button type="submit" class="btn btn-secondary min-h-10 px-5">Aplicar</button>
+        {% endif %}
+    </form>
+
+    {% if filtros_ativos %}
+    <div class="flex flex-wrap items-center gap-2 border-t border-slate-200 px-3 py-2 text-sm">
+        <span class="text-xs text-slate-600">Filtrando por:</span>
+        {% for f in filtros_ativos %}
+            <a href="{{ f.url }}"
+               class="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-primary-300 bg-primary-50 px-3 text-primary-700 no-underline transition-colors duration-150 hover:bg-primary-100">
+                {{ f.rotulo }}<span aria-hidden="true">✕</span><span class="sr-only">— remover filtro</span>
+            </a>
+        {% endfor %}
+        <a class="ml-auto text-sm text-slate-600 underline hover:text-slate-900" href="{{ url_limpar }}">Limpar tudo</a>
+    </div>
+    {% endif %}
+</div>

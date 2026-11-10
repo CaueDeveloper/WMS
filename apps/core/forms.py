@@ -13,12 +13,27 @@ class NovoUsuarioForm(forms.Form):
     grupo = forms.ChoiceField(
         label='Grupo',
         choices=[(s, s) for s in SETORES],
-        widget=forms.Select(attrs={'class': 'input-field py-2.5'}),
+        widget=forms.Select(attrs={'class': 'input-field'}),
     )
     subgrupo = forms.ChoiceField(
         label='Subgrupo',
         choices=[(p, p) for p in PAPEIS],
-        widget=forms.Select(attrs={'class': 'input-field py-2.5'}),
+        widget=forms.Select(attrs={'class': 'input-field'}),
+    )
+
+
+class NovoOperadorForm(forms.Form):
+    """Operador cadastrado direto no WMS (fora do AD): login e senha locais."""
+
+    nome = forms.CharField(label='Nome', max_length=150, widget=forms.TextInput(attrs={'class': 'input-field'}))
+    username = forms.CharField(label='Usuário (login)', max_length=150, widget=forms.TextInput(attrs={'class': 'input-field', 'autocomplete': 'off'}))
+    senha = forms.CharField(
+        label='Senha', min_length=6, widget=forms.PasswordInput(attrs={'class': 'input-field', 'autocomplete': 'new-password'}),
+    )
+    grupo = forms.ChoiceField(
+        label='Grupo',
+        choices=[(s, s) for s in SETORES],
+        widget=forms.Select(attrs={'class': 'input-field'}),
     )
 
 
@@ -27,12 +42,12 @@ class AlterarGrupoUsuarioForm(forms.Form):
     grupo = forms.ChoiceField(
         label='Grupo',
         choices=[(s, s) for s in SETORES],
-        widget=forms.Select(attrs={'class': 'input-field py-2.5'}),
+        widget=forms.Select(attrs={'class': 'input-field'}),
     )
     subgrupo = forms.ChoiceField(
         label='Subgrupo',
         choices=[(p, p) for p in PAPEIS],
-        widget=forms.Select(attrs={'class': 'input-field py-2.5'}),
+        widget=forms.Select(attrs={'class': 'input-field'}),
     )
 
 
@@ -40,7 +55,7 @@ class LoginForm(AuthenticationForm):
     error_messages = {
         **AuthenticationForm.error_messages,
         'invalid_login': (
-            'Credenciais de acesso não encontradas. As credenciais devem ser '
-            'as mesmas usadas para acessar a rede corporativa.'
+            'Credenciais de acesso não encontradas. Gestores usam as credenciais da '
+            'rede corporativa; operadores, o usuário e a senha cadastrados no WMS.'
         ),
     }

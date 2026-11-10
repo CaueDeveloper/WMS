@@ -42,7 +42,7 @@ Problema original: pesagem e conferência manuais, informadas por WhatsApp, sem 
 | **Administradores** | Tudo, incluindo a tela Usuários (atribuição de perfis a partir do AD). |
 | **Operador Produção** | Emitir etiquetas; bipar paletes na transferência da Produção; reprovar. |
 | **Gestor Produção** | Aprovar lote na Produção; corrigir paletes reprovados; reprovar; relatório de aprovação; estatísticas. |
-| **Operador Logística** | Bipar na conferência da Logística; reprovar; Put-away; plano de armazenagem; retirar palete do mapa. |
+| **Operador Logística** | Bipar na conferência da Logística; reprovar; Put-away; retirar palete do mapa. |
 | **Gestor Logística** | Aprovar lote na Logística; reprovar; relatório de aprovação; estatísticas. |
 | Todos os operacionais | Mapa de estoque e consultas (palete, lote). |
 
@@ -55,35 +55,34 @@ Usuário novo de Produção/Logística nasce **inativo** e precisa ser ativado p
 ### 4.1 Máquina de estados do palete
 
 ```
-CRIADO ──bip Produção──▶ EM_TRANSFERENCIA ──aprova lote (Gestor Prod.)──▶ CONFERIDO
-CONFERIDO ──bip Logística──▶ EM_CONFERENCIA_LOGISTICA ──aprova lote (Gestor Log.)──▶ CONFERIDO_LOGISTICA
-CONFERIDO_LOGISTICA ──Put-away──▶ ARMAZENADO ──retirar──▶ RETIRADO (terminal)
-(CRIADO | EM_TRANSFERENCIA | CONFERIDO | EM_CONFERENCIA_LOGISTICA) ──reprovar──▶ REPROVADO ──corrigir (Gestor Prod.)──▶ CRIADO
+FABRICADO ──bip Produção──▶ TRANSFERENCIA_PRODUCAO ──aprova lote (Gestor Prod.)──▶ APROVADO_PRODUCAO
+APROVADO_PRODUCAO ──bip Logística──▶ TRANSFERENCIA_LOGISTICA ──aprova lote (Gestor Log.)──▶ APROVADO_LOGISTICA
+APROVADO_LOGISTICA ──Put-away──▶ ARMAZENADO ──retirar──▶ RETIRADO (terminal)
+(FABRICADO | TRANSFERENCIA_PRODUCAO | APROVADO_PRODUCAO | TRANSFERENCIA_LOGISTICA) ──reprovar──▶ REPROVADO ──corrigir (Gestor Prod.)──▶ FABRICADO
 ```
 
-`FINALIZADO` ainda existe nas escolhas do modelo, mas **nenhum fluxo o produz [DESABILITADO]**. Toda transição grava uma linha em `PaleteHistorico` (usuário e data/hora).
+O status `FINALIZADO` (SAP) foi removido do modelo (migração 0017); paletes antigos nele voltam a `ARMAZENADO`. Toda transição grava uma linha em `PaleteHistorico` (usuário e data/hora).
 
 ### 4.2 Recebimento / emissão (Produção)
 1. Operador escolhe o produto, informa lote, quantidade (1–50) e data de fabricação (não futura).
 2. Peso padrão: 500 kg. O checkbox **"Peso diferente de 500 kg"** libera a digitação do peso; produtos cadastrados com `peso_variavel` já o marcam automaticamente.
 3. `[INVARIANTE]` O **lote** aceita só `A-Z 0-9 . _ / -` (é gravado em ZPL e em URLs) e não pode receber novos paletes depois de aprovado.
-4. Os paletes são gravados com o histórico `CRIADO` na mesma transação; as etiquetas são impressas após o commit, sem aguardar aprovação.
+4. Os paletes são gravados com o histórico `FABRICADO` na mesma transação; as etiquetas são impressas após o commit, sem aguardar aprovação.
 
 ### 4.3 Transferência
-- **Produção:** o Operador bipa cada palete (`CRIADO → EM_TRANSFERENCIA`). O Gestor só aprova o lote quando **todos** os paletes foram bipados e não há reprovados pendentes.
-- **Logística:** o Operador bipa (`CONFERIDO → EM_CONFERENCIA_LOGISTICA`); o Gestor aprova o lote inteiro. `[INVARIANTE]` O lote não é aprovado na Logística se ainda houver paletes dele na Produção (`CRIADO`/`EM_TRANSFERENCIA`) ou reprovados.
-- **Reprovação:** qualquer operador/gestor da etapa reprova com motivo opcional. O Gestor Produção corrige item, peso e data; o palete volta a `CRIADO`. **Se peso ou data de fabricação mudarem, uma nova etiqueta é reimpressa automaticamente** (a anterior deve ser substituída).
+- **Produção:** o Operador bipa cada palete (`FABRICADO → TRANSFERENCIA_PRODUCAO`). O Gestor só aprova o lote quando **todos** os paletes foram bipados e não há reprovados pendentes.
+- **Logística:** o Operador bipa (`APROVADO_PRODUCAO → TRANSFERENCIA_LOGISTICA`); o Gestor aprova o lote inteiro. `[INVARIANTE]` O lote não é aprovado na Logística se ainda houver paletes dele na Produção (`FABRICADO`/`TRANSFERENCIA_PRODUCAO`) ou reprovados.
+- **Reprovação:** qualquer operador/gestor da etapa reprova com motivo opcional. O Gestor Produção corrige item, peso e data; o palete volta a `FABRICADO`. **Se peso ou data de fabricação mudarem, uma nova etiqueta é reimpressa automaticamente** (a anterior deve ser substituída).
 - Bipagens e aprovações são atômicas (linha travada com `select_for_update`).
 - Após aprovar, o Gestor pode emitir o **relatório de aprovação** (Produção ou Logística) dos lotes aprovados em uma data.
 
 ### 4.4 Armazenagem (Put-away)
-1. Operador Logística bipa um palete `CONFERIDO_LOGISTICA` e o sistema identifica o lote.
+1. Operador Logística bipa um palete `APROVADO_LOGISTICA` e o sistema identifica o lote.
 2. Escolhe andar e corredor; os paletes do lote ocupam as primeiras posições livres (ordem de posição).
 3. `[INVARIANTE]` Capacidade 1 por posição, garantida por `select_for_update` em `alocar_lote` e, nos bancos que suportam, por restrição única condicional (um `ARMAZENADO` por endereço).
 4. Se o lote não couber inteiro em nenhum corredor/andar, a alocação vira **parcial**: preenche o corredor escolhido e o usuário escolhe outro para o restante.
-5. **Plano de armazenagem:** consulta o caminho até a posição de um palete já armazenado.
-6. **Retirar do mapa** (saída física, terminal): somente Operador Logística/Administradores, com confirmação.
-7. A **reautenticação por senha do Gestor** e a sincronização com o SAP **[DESABILITADO]** nesta versão.
+5. **Retirar do mapa** (saída física, terminal): somente Operador Logística/Administradores, com confirmação.
+6. A **reautenticação por senha do Gestor** e a sincronização com o SAP **[DESABILITADO]** nesta versão.
 
 ### 4.5 Consulta e gestão
 - **Mapa de estoque:** visões por ocupação, andares, corredores, posições e geral; filtros por andar/corredor/posição/situação.

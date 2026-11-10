@@ -1,16 +1,20 @@
 {% extends 'core/_shell.html' %}
 
-{% block title %}Usuários — WMS{% endblock %}
-{% block titulo_pagina %}Usuários{% endblock %}
+{% block title %}{{ titulo }} — WMS{% endblock %}
+{% block titulo_pagina %}{{ titulo }}{% endblock %}
 
 {% block shell_content %}
 <div class="flex items-center justify-between gap-3 mb-4">
-    <p class="text-sm text-slate-600">Usuários do WMS e o grupo de acesso de cada um.</p>
-    <button type="button" class="btn shrink-0" data-abrir="dlg-novo">{% include 'core/_icone.html' with nome='plus' classe='h-4 w-4' %}Novo usuário</button>
+    <p class="text-sm text-slate-600">{% if papel %}{{ titulo }} do WMS{% else %}Usuários do WMS{% endif %} e o grupo de acesso de cada um.</p>
+    <button type="button" class="btn shrink-0" data-abrir="{% if papel == 'Operador' %}dlg-novo-operador{% else %}dlg-novo{% endif %}">{% include 'core/_icone.html' with nome='plus' classe='h-4 w-4' %}Novo usuário</button>
 </div>
 
 {% if not linhas %}
-    {% include 'core/_vazio.html' with texto='Nenhum usuário cadastrado. Clique em "Novo" para atribuir um usuário do AD a um perfil de acesso.' %}
+    {% if papel %}
+        {% include 'core/_vazio.html' with texto='Nenhum cadastrado neste papel. Clique em "Novo" para atribuir um usuário do AD a um perfil de acesso.' %}
+    {% else %}
+        {% include 'core/_vazio.html' with texto='Nenhum usuário cadastrado. Clique em "Novo" para atribuir um usuário do AD a um perfil de acesso.' %}
+    {% endif %}
 {% else %}
     <div class="overflow-x-auto">
     <table class="table-admin">
@@ -50,15 +54,15 @@
 {% endif %}
 
 {# Menu flutuante das ações (posicionado por JS para não ser cortado pelo overflow da tabela) #}
-<div id="menu-acoes" class="fixed z-50 hidden w-44 overflow-hidden rounded border border-slate-200 bg-white py-1 text-sm shadow-lg">
+<div id="menu-acoes" class="fixed z-50 hidden w-48 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-pop">
     <form method="post" id="menu-form-status">
         {% csrf_token %}
         <input type="hidden" name="acao" id="menu-acao-status">
         <input type="hidden" name="usuario_id" id="menu-usuario-status">
-        <button type="submit" id="menu-status" class="block w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-100"></button>
+        <button type="submit" id="menu-status" class="menu-item"></button>
     </form>
-    <button type="button" data-abrir="dlg-alterar" class="block w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-100">Alterar grupo</button>
-    <button type="button" data-abrir="dlg-excluir" class="block w-full px-4 py-2 text-left text-danger-600 hover:bg-danger-50">Excluir</button>
+    <button type="button" data-abrir="dlg-alterar" class="menu-item">Alterar grupo</button>
+    <button type="button" data-abrir="dlg-excluir" class="menu-item menu-item-danger">Excluir</button>
 </div>
 
 {# Pop-up "Novo": busca o usuário no AD e o atribui a um grupo/subgrupo #}
@@ -75,7 +79,7 @@
         <div class="form-card-body">
             <div>
                 <label for="busca-usuario">Usuário do AD</label>
-                <input type="text" id="busca-usuario" class="input-field py-2.5" autocomplete="off"
+                <input type="text" id="busca-usuario" class="input-field" autocomplete="off"
                        placeholder="Filtrar por nome ou login">
                 <ul id="busca-resultados" class="hidden mt-2 max-h-48 overflow-y-auto rounded border border-slate-300 bg-white text-sm divide-y divide-slate-100"></ul>
                 <p id="busca-status" class="mt-2 text-xs text-slate-600"></p>
@@ -100,6 +104,30 @@
     </form>
 </dialog>
 
+{# Pop-up "Novo operador": cadastro local, sem AD #}
+<dialog id="dlg-novo-operador" class="dialog-modal">
+    <form method="post" class="form-card" autocomplete="off">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="novo_operador">
+        <header class="form-card-header">
+            <h2 class="form-card-title">Novo operador</h2>
+            <p class="form-card-subtitle">Operadores não ficam no AD: defina o login e a senha de acesso.</p>
+        </header>
+        <div class="form-card-body">
+            {% for campo in form_operador %}
+            <div>
+                <label for="{{ campo.id_for_label }}">{{ campo.label }}</label>
+                {{ campo }}
+            </div>
+            {% endfor %}
+        </div>
+        <footer class="form-card-footer">
+            <button type="button" class="btn btn-secondary" data-fechar>Cancelar</button>
+            <button type="submit" class="btn">Cadastrar</button>
+        </footer>
+    </form>
+</dialog>
+
 {# Pop-up "Alterar grupo" #}
 <dialog id="dlg-alterar" class="dialog-modal">
     <form method="post" class="form-card">
@@ -114,13 +142,13 @@
         <div class="form-card-body">
             <div>
                 <label for="alterar-grupo">{{ form_alterar.grupo.label }}</label>
-                <select name="grupo" id="alterar-grupo" class="input-field py-2.5">
+                <select name="grupo" id="alterar-grupo" class="input-field">
                     {% for valor, rotulo in form_alterar.fields.grupo.choices %}<option value="{{ valor }}">{{ rotulo }}</option>{% endfor %}
                 </select>
             </div>
             <div>
                 <label for="alterar-subgrupo">{{ form_alterar.subgrupo.label }}</label>
-                <select name="subgrupo" id="alterar-subgrupo" class="input-field py-2.5">
+                <select name="subgrupo" id="alterar-subgrupo" class="input-field">
                     {% for valor, rotulo in form_alterar.fields.subgrupo.choices %}<option value="{{ valor }}">{{ rotulo }}</option>{% endfor %}
                 </select>
             </div>
@@ -149,7 +177,7 @@
 
         <footer class="form-card-footer">
             <button type="button" class="btn btn-secondary" data-fechar>Cancelar</button>
-            <button type="submit" class="btn bg-danger-600 hover:bg-danger-500">Excluir</button>
+            <button type="submit" class="btn btn-danger-solid">Excluir</button>
         </footer>
     </form>
 </dialog>

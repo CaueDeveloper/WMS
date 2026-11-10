@@ -1,0 +1,211 @@
+{% extends 'core/_shell.html' %}
+{% load core_extras %}
+
+{% block title %}Novo romaneio — WMS{% endblock %}
+{% block titulo_pagina %}Novo romaneio{% endblock %}
+
+{% block shell_content %}
+<form method="post" id="form-romaneio" autocomplete="off" class="form-card max-w-5xl">
+    {% csrf_token %}
+    <header class="form-card-header">
+        <h2 class="form-card-title">Romaneio</h2>
+    </header>
+    <div class="form-card-body">
+
+        {% if notas %}
+        <div class="rm-filtro" id="rm-filtro" role="search">
+            <div class="rm-busca">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                <input type="search" id="rm-q" placeholder="Nº da nota ou carga" aria-label="Buscar nota" autocomplete="off" autofocus>
+                <kbd aria-hidden="true">/</kbd>
+                <span class="rm-contador" id="rm-contador" aria-live="polite"></span>
+            </div>
+            <button type="button" class="rm-limpar" id="rm-limpar" hidden>Limpar busca</button>
+        </div>
+        <p class="rm-vazio" id="rm-dica">Digite o número da nota para começar. Você pode marcar várias notas no mesmo romaneio.</p>
+        {% endif %}
+
+        {% for nota in notas %}
+        <section class="rm-nota" aria-label="Nota {{ nota.docnum }}" data-busca="{{ nota.busca }}" data-url="{% url 'romaneio:nota_itens' nota.docentry %}">
+            <label class="rm-nota-topo">
+                <input type="checkbox" name="nota" value="{{ nota.docentry }}" class="rm-radio"{% if nota.escolhida %} checked{% endif %}>
+                <span class="rm-numero"><small>Nota</small>{{ nota.docnum }}</span>
+                <span class="rm-nota-info"></span>
+                <span class="rm-metas">
+                    <span class="rm-meta-item"><small>Carga</small>{{ nota.carga }}</span>
+                </span>
+                <span class="rm-selo" hidden></span>
+            </label>
+            <div class="rm-corpo">{% if nota.corpo %}{% include 'romaneio/_nota_corpo.html' with nota=nota.corpo %}{% endif %}</div>
+        </section>
+        {% empty %}
+        <p class="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-600">{% if sap_erro %}Notas indisponíveis.{% else %}Nenhuma nota disponível.{% endif %}</p>
+        {% endfor %}
+        <p class="rm-vazio" id="rm-vazio" hidden>Nenhuma nota para esses filtros.</p>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+                <label for="id_nome">Nome</label>
+                <input type="text" id="id_nome" class="input-field" value="{% firstof request.user.get_full_name request.user.username %}" disabled>
+            </div>
+            {% for campo in form %}
+            <div>
+                <label for="{{ campo.id_for_label }}">{{ campo.label }}</label>
+                {{ campo }}
+                {% for erro in campo.errors %}<p class="field-error" role="alert">{{ erro }}</p>{% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    <footer class="form-card-footer">
+        <a class="btn btn-secondary min-h-11 no-underline" href="{% url 'romaneio:lista' %}">Cancelar</a>
+        <button type="submit" class="btn min-h-11">Criar romaneio</button>
+    </footer>
+</form>
+
+<style>
+.rm-filtro{box-sizing:border-box;min-width:0;max-width:100%;--g50:var(--color-primary-50,#eef5f3);--g100:var(--color-primary-100,#d7e8e3);--g200:var(--color-primary-200,#b0d1c8);--g400:var(--color-primary-400,#57937f);--g500:var(--color-primary-500,#256359);--g600:var(--color-primary-600,#1d4e45);--g700:var(--color-primary-700,#183f38);
+position:sticky;top:.5rem;z-index:5;display:grid;gap:.7rem;padding:.8rem;border-radius:1.25rem;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);border:1px solid var(--g100);box-shadow:0 1px 2px rgba(14,38,34,.06),0 12px 28px -14px rgba(24,63,56,.35)}
+.rm-busca{box-sizing:border-box;min-width:0;max-width:100%;display:flex;align-items:center;gap:.65rem;padding:.15rem .5rem .15rem 1rem;border-radius:999px;background:var(--g50);border:1.5px solid transparent;color:var(--g500);transition:border-color .15s,box-shadow .15s,background .15s}
+.rm-busca:focus-within{background:#fff;border-color:var(--g500);box-shadow:0 0 0 4px rgba(37,99,89,.15)}
+.rm-busca input{flex:1 1 0;width:0;min-width:0;text-overflow:ellipsis;border:0!important;outline:0!important;background:transparent!important;font-size:1.05rem;padding:.7rem 0;color:var(--g800,#13312c);box-shadow:none!important}
+.rm-busca input::placeholder{color:var(--g400)}
+.rm-busca kbd{font-size:.7rem;border:1px solid var(--g200);border-radius:.4rem;padding:.05rem .4rem;color:var(--g500);background:#fff}
+.rm-contador{font-size:.75rem;font-weight:600;color:#fff;background:var(--g600);border-radius:999px;padding:.25rem .65rem;white-space:nowrap}
+.rm-linha{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem}
+.rm-rotulo{font-size:.68rem;text-transform:uppercase;letter-spacing:.09em;font-weight:600;color:var(--g400);min-width:5.2rem}
+.rm-chip{border:1px solid var(--g200);background:#fff;color:var(--g600);border-radius:999px;padding:.2rem .8rem;font-size:.8rem;cursor:pointer;min-height:2rem;transition:background .12s,color .12s,border-color .12s,transform .12s}
+.rm-chip:hover{background:var(--g50);border-color:var(--g400)}
+.rm-chip:active{transform:scale(.96)}
+.rm-chip:focus-visible,.rm-limpar:focus-visible{outline:2px solid var(--g500);outline-offset:2px}
+.rm-chip[aria-pressed=true]{background:var(--g600);border-color:var(--g600);color:#fff;font-weight:600}
+.rm-chip-sku{font-family:ui-monospace,monospace}
+.rm-custom{display:inline-flex;align-items:center;gap:.35rem;font-size:.8rem;color:var(--g600)}
+.rm-custom input{background:var(--g50);color:var(--g700);border-radius:.5rem;padding:.2rem .5rem;border:1px solid var(--g200)}
+.rm-limpar{background:none;border:0;color:var(--g500);text-decoration:underline;text-underline-offset:3px;cursor:pointer;font-size:.8rem}
+.rm-nota{border:1px solid var(--color-primary-100,#d7e8e3);border-radius:1rem;background:#fff;padding:.8rem .9rem;transition:border-color .15s,box-shadow .15s,background .15s}
+.rm-nota:hover{border-color:var(--color-primary-300,#82b3a5)}
+.rm-nota:has(.rm-radio:checked){border-color:var(--color-primary-500,#256359);background:var(--color-primary-50,#eef5f3);box-shadow:0 0 0 3px rgba(37,99,89,.12)}
+.rm-nota[hidden],.rm-vazio[hidden],.rm-extra[hidden]{display:none}
+.rm-extra{display:grid;gap:.6rem}
+.rm-mais{justify-self:start}
+.rm-limpar{justify-self:end}
+.rm-nota-topo{display:flex;flex-wrap:wrap;gap:.75rem 1rem;align-items:center;cursor:pointer}
+.rm-radio{width:1.25rem;height:1.25rem;accent-color:var(--color-primary-600,#1d4e45);flex:none}
+.rm-numero{display:grid;justify-items:center;min-width:4.6rem;padding:.35rem .7rem;border-radius:.75rem;background:var(--color-primary-600,#1d4e45);color:#fff;font-size:1.15rem;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
+.rm-numero small{font-size:.6rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;opacity:.75}
+.rm-nota-info{flex:1 1 12rem;min-width:0;display:grid;gap:.1rem}
+.rm-nota-titulo{font-weight:700;font-size:1rem;color:var(--color-primary-800,#13312c);line-height:1.25}
+.rm-nota-cod{font-family:ui-monospace,monospace;font-size:.75rem;color:var(--color-primary-400,#57937f)}
+.rm-metas{display:flex;gap:1.25rem}
+.rm-meta-item{display:grid;font-size:.9rem;font-weight:600;color:var(--color-primary-800,#13312c);font-variant-numeric:tabular-nums}
+.rm-meta-item small{font-size:.62rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--color-primary-400,#57937f)}
+.rm-selo{font-size:.7rem;font-weight:600;padding:.2rem .6rem;border-radius:999px;white-space:nowrap}
+.rm-selo-ok{background:var(--color-success-50,#e9f4ed);color:var(--color-success-600,#256340)}
+.rm-selo-falta{background:#fee2e2;color:#991b1b}
+.rm-carregando{margin:.7rem 0 0;font-size:.85rem;color:var(--color-primary-500,#256359)}.rm-erro{color:#b91c1c}
+.rm-linhas{display:grid;gap:.6rem;margin-top:.7rem}
+.rm-item{border:1px solid #e2e8f0;border-left-width:4px;border-radius:.75rem;padding:.65rem .8rem;background:#f8fafc}
+.rm-item.rm-ok{border-left-color:var(--color-success-500,#2f7a4f)}.rm-item.rm-parcial{border-left-color:#f59e0b}.rm-item.rm-sem{border-left-color:#ef4444}
+.rm-item-topo{display:flex;justify-content:space-between;gap:.75rem;flex-wrap:wrap}
+.rm-sku{font-family:ui-monospace,monospace;font-size:.75rem;background:#e2e8f0;border-radius:.3rem;padding:.05rem .4rem;margin-right:.4rem}
+.rm-desc{font-size:.85rem;color:#0f172a}
+.rm-peso{font-size:.85rem;color:#475569;text-align:right}.rm-peso strong{color:#0f172a;font-size:1rem}
+.rm-barra{height:.5rem;border-radius:999px;background:#e2e8f0;overflow:hidden;margin:.5rem 0}
+.rm-barra span{display:block;height:100%;border-radius:inherit;background:var(--color-success-500,#2f7a4f)}
+.rm-parcial .rm-barra span{background:#f59e0b}.rm-sem .rm-barra span{background:#ef4444}
+.rm-paletes{display:flex;flex-wrap:wrap;gap:.5rem}
+.rm-palete{display:grid;gap:.1rem;padding:.4rem .65rem;border-radius:.6rem;background:#fff;border:1px solid #cbd5e1;min-width:9.5rem}
+.rm-end{font-family:ui-monospace,monospace;font-size:.78rem;font-weight:600;color:#0f172a}
+.rm-kg{font-size:.9rem;font-weight:600;color:var(--color-success-600,#256340)}.rm-kg small{font-weight:400;color:#64748b;font-size:.7rem}
+.rm-meta{font-size:.7rem;color:#64748b}
+.rm-palete-falta{border:1px dashed #ef4444;background:#fef2f2}.rm-palete-falta .rm-end{color:#b91c1c}
+.rm-nota-rodape{display:flex;justify-content:flex-end;gap:1.25rem;margin-top:.7rem;padding-top:.5rem;border-top:1px solid #e2e8f0;font-size:.85rem;color:#475569}
+.rm-nota-rodape strong{color:#0f172a}
+.rm-vazio{border:1px dashed #cbd5e1;border-radius:.75rem;padding:1rem;text-align:center;color:#475569;font-size:.9rem}
+@media (max-width:640px){.rm-busca kbd{display:none}.rm-busca{padding-left:.8rem}.rm-contador{font-size:.68rem;padding:.2rem .5rem}.rm-nota-topo{min-width:0}.rm-metas{flex-wrap:wrap;gap:.5rem 1rem}.rm-rotulo{min-width:100%}.rm-peso{text-align:left}.rm-palete{min-width:100%}}
+</style>
+<script>
+(function () {
+    var q = document.getElementById('rm-q');
+    if (!q) return;
+    var notas = Array.prototype.slice.call(document.querySelectorAll('.rm-nota'));
+    var limpar = document.getElementById('rm-limpar');
+    var estado = { q: '' }, timer;
+
+    function norm(t) { return (t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+    var textos = notas.map(function (n) { return norm(n.dataset.busca); });
+
+    /* As linhas e o plano de estoque são buscados só da nota que o usuário vê/escolhe
+       (baixar todas de uma vez leva ~18 s no SAP). */
+    function carregar(nota) {
+        var corpo = nota.querySelector('.rm-corpo'), selo = nota.querySelector('.rm-selo'), radio = nota.querySelector('input[type=checkbox]');
+        if (nota.dataset.carregado || nota.dataset.carregando) return;
+        if (corpo.children.length) { nota.dataset.carregado = '1'; return; }
+        nota.dataset.carregando = '1';
+        corpo.innerHTML = '<p class="rm-carregando">Carregando itens e estoque…</p>';
+        fetch(nota.dataset.url, { credentials: 'same-origin' }).then(function (r) {
+            return r.text().then(function (t) { if (!r.ok) throw new Error(t); return t; });
+        }).then(function (html) {
+            corpo.innerHTML = html;
+            nota.dataset.carregado = '1';
+            var ok = corpo.querySelector('.rm-corpo-ok').dataset.atendivel === '1';
+            selo.hidden = false;
+            selo.className = 'rm-selo ' + (ok ? 'rm-selo-ok' : 'rm-selo-falta');
+            selo.textContent = ok ? 'Estoque cobre a nota' : 'Falta estoque';
+            radio.disabled = !ok;
+            if (!ok) radio.checked = false;
+        }).catch(function (e) {
+            corpo.innerHTML = '<p class="rm-carregando rm-erro"></p>';
+            corpo.firstChild.textContent = e.message || 'Não foi possível carregar a nota.';
+        }).then(function () { delete nota.dataset.carregando; });
+    }
+
+    function aplicar() {
+        var termos = norm(estado.q).split(/\s+/).filter(Boolean), visiveis = [];
+        var ativo = !!termos.length;
+        notas.forEach(function (n, i) {
+            var r = n.querySelector('input[type=checkbox]');
+            var mostra = ativo && termos.every(function (t) { return textos[i].indexOf(t) !== -1; });
+            if (r && r.checked) mostra = true;  // nota já escolhida nunca some
+            n.hidden = !mostra;
+            if (mostra) visiveis.push(n);
+        });
+        if (visiveis.length <= 3) visiveis.forEach(carregar);  // poucas notas: já mostra os itens
+        if (termos.length && visiveis.length === 1) {
+            var r1 = visiveis[0].querySelector('input[type=checkbox]');
+            if (!notas.some(function (n) { var r = n.querySelector('input[type=checkbox]'); return r && r.checked; })) r1.checked = true;
+        }
+        document.getElementById('rm-contador').textContent = ativo ? visiveis.length + ' de ' + notas.length : notas.length + ' notas';
+        document.getElementById('rm-vazio').hidden = !ativo || visiveis.length !== 0;
+        document.getElementById('rm-dica').hidden = ativo || notas.some(function (n) { return !n.hidden; });
+        limpar.hidden = !ativo;
+        try {
+            var p = new URLSearchParams();
+            if (estado.q) p.set('f', estado.q);
+            history.replaceState(null, '', location.pathname + (p.toString() ? '?' + p : ''));
+        } catch (e) {}
+    }
+
+    notas.forEach(function (n) {
+        n.querySelector('input[type=checkbox]').addEventListener('change', function () { carregar(n); });
+    });
+    q.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(function () { estado.q = q.value; aplicar(); }, 200); });
+    q.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') e.preventDefault();
+        if (e.key === 'Escape') { q.value = ''; estado.q = ''; aplicar(); }
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); q.focus(); }
+    });
+    limpar.addEventListener('click', function () {
+        estado = { q: '' };
+        q.value = ''; aplicar();
+    });
+
+    var url = new URLSearchParams(location.search);
+    if (url.get('f')) { q.value = estado.q = url.get('f'); }
+    aplicar();
+})();
+</script>
+{% endblock %}

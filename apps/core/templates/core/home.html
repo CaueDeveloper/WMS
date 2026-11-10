@@ -4,24 +4,23 @@
 {% block titulo_pagina %}Início{% endblock %}
 
 {% block shell_content %}
-<div class="mx-auto max-w-6xl">
+<div class="page-container">
     <div class="mb-6">
         <h2 class="m-0 text-2xl font-semibold text-slate-900">Olá, {{ usuario_nome }}</h2>
-        <p class="mt-1 text-sm text-slate-600">{{ hoje }}. Veja onde estão os paletes e o que está esperando por você.</p>
+        <p class="mt-1 text-sm text-slate-600">{{ hoje }}.</p>
     </div>
 
     {# O fluxo real do palete, da etiqueta ao mapa. A barra de cima fica verde nas etapas com paletes. #}
     <section aria-labelledby="titulo-fluxo" class="mb-8">
-        <h3 id="titulo-fluxo" class="mb-3 text-sm font-semibold text-slate-700">Fluxo do palete</h3>
+        <h3 id="titulo-fluxo" class="mb-3 text-sm font-semibold text-slate-700">Fluxo do Sistema</h3>
         <ol class="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
             {% for etapa in etapas %}
             <li>
                 {% if etapa.url %}<a href="{{ etapa.url }}" class="group block h-full no-underline">{% else %}<div class="h-full">{% endif %}
-                    <div class="relative h-full rounded-b-md border border-t-0 border-slate-200 bg-white px-4 py-3 shadow-sm transition-colors duration-150 {% if etapa.url %}group-hover:border-primary-300 group-hover:bg-primary-50{% endif %}">
-                        <span class="absolute inset-x-0 top-0 h-1 rounded-t-sm {% if etapa.quantidade %}bg-primary-600{% else %}bg-slate-200{% endif %}" aria-hidden="true"></span>
+                    <div class="relative h-full overflow-hidden rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-card transition-colors duration-150 {% if etapa.url %}group-hover:border-primary-300 group-hover:bg-primary-50{% endif %}">
+                        <span class="absolute inset-x-0 top-0 h-1 {% if etapa.quantidade %}bg-primary-600{% else %}bg-slate-200{% endif %}" aria-hidden="true"></span>
                         <div class="text-3xl font-semibold leading-none {% if etapa.quantidade %}text-slate-900{% else %}text-slate-400{% endif %}">{{ etapa.quantidade }}</div>
                         <div class="mt-2 text-sm font-semibold text-slate-800">{{ etapa.rotulo }}</div>
-                        <div class="text-xs text-slate-600">{{ etapa.situacao }}</div>
                     </div>
                 {% if etapa.url %}</a>{% else %}</div>{% endif %}
             </li>
@@ -33,11 +32,11 @@
         <section aria-labelledby="titulo-atalhos" class="lg:col-span-3">
             <h3 id="titulo-atalhos" class="mb-3 text-sm font-semibold text-slate-700">O que você pode fazer</h3>
             {% if atalhos %}
-            <ul class="divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <ul class="divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-card">
                 {% for item in atalhos %}
                 <li>
-                    <a href="{{ item.url }}" class="flex min-h-14 items-center gap-3 px-4 py-3 no-underline transition-colors duration-150 hover:bg-slate-50">
-                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary-50 text-primary-700">{% include 'core/_icone.html' with nome=item.icone %}</span>
+                    <a href="{{ item.url }}" class="flex min-h-14 items-center gap-3 px-4 py-3 no-underline transition-colors duration-150 hover:bg-primary-50/60">
+                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-700">{% include 'core/_icone.html' with nome=item.icone %}</span>
                         <span class="min-w-0 flex-1">
                             <span class="block text-sm font-semibold text-slate-900">{{ item.rotulo }}</span>
                             <span class="block text-sm text-slate-600">{{ item.descricao }}</span>
@@ -57,7 +56,7 @@
         <section aria-labelledby="titulo-recentes" class="lg:col-span-2">
             <h3 id="titulo-recentes" class="mb-3 text-sm font-semibold text-slate-700">Últimas movimentações</h3>
             {% if recentes %}
-            <ul class="divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <ul class="divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-card">
                 {% for mov in recentes %}
                 <li class="px-4 py-2.5">
                     <div class="flex items-baseline justify-between gap-3">
@@ -65,7 +64,7 @@
                         <time class="shrink-0 text-xs text-slate-600" datetime="{{ mov.criado_em|date:'c' }}">{{ mov.criado_em|date:"d/m H:i" }}</time>
                     </div>
                     <div class="truncate text-sm text-slate-700" title="{{ mov.get_estado_display }}">{{ mov.get_estado_display }}</div>
-                    <div class="text-xs text-slate-600">{% if mov.usuario %}{{ mov.usuario.get_full_name|default:mov.usuario.get_username }}{% else %}Sistema{% endif %}</div>
+                    <div class="text-xs text-slate-600">{% if mov.usuario %}{{ mov.usuario.get_full_name|default:mov.usuario.get_username }}{% for g in mov.usuario.groups.all %}<span class="text-slate-500"> · {{ g.name }}</span>{% endfor %}{% else %}Sistema{% endif %}</div>
                 </li>
                 {% endfor %}
             </ul>

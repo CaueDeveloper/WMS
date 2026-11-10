@@ -36,3 +36,17 @@ antes de publicar em produção.
 Cores, tipografia e componentes reutilizáveis (`.btn`, `.card`, `.badge-*`,
 `.table-admin`, etc.) estão definidos em `deploy/tailwind/input.css`, com um
 comentário de referência rápida no topo do arquivo.
+
+### Componentes e tokens (identidade visual)
+
+- **Cores:** `primary-*` (verde de marca), `success/warning/danger-*`, `info-*` (azul
+  discreto para destaques neutros), `canvas` (fundo da página), `slate-*` (neutros).
+- **Forma:** `rounded` = 8px (controles), `rounded-lg` = 12px (cartões, modais);
+  `shadow-card` (cartões) e `shadow-pop` (modais e menus).
+- **Botões:** `.btn` (primário), `.btn-secondary`, `.btn-danger` (contorno),
+  `.btn-danger-solid`, `.btn-ghost`, `.btn-sm`, `.btn-segment` / `.btn-segment-ativo`.
+- **Campos:** `.input-field` (input, select e textarea), `.field-hint`, `.field-error`.
+- **Layout:** `.page-container`, `.page-header`, `.form-card*`, `.menu-item` / `.menu-item-danger`.
+- **Densidade coletor → desktop** (grande no celular/Zebra, compacto em `lg`):
+  `.btn-coletor`, `.btn-coletor-lg`, `.input-coletor`, `.texto-coletor`. Use no lugar de
+  utilitários soltos como `max-lg:min-h-12` ou `lg:!text-sm`.

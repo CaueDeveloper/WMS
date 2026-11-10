@@ -1,0 +1,25 @@
+{% extends 'core/_shell.html' %}
+
+{% block title %}Etiquetas de corredor — WMS{% endblock %}
+{% block titulo_pagina %}Etiquetas de corredor{% endblock %}
+
+{% block shell_content %}
+<div class="mx-auto max-w-3xl">
+    <form method="get" class="mb-4" id="form-corredor">
+        <label for="corredor" class="texto-coletor">Corredor</label>
+        <select name="corredor" id="corredor" class="input-field" onchange="this.form.submit()">
+            {% for letra in corredores %}<option value="{{ letra }}"{% if letra == corredor %} selected{% endif %}>Corredor {{ letra }}</option>{% endfor %}
+        </select>
+    </form>
+
+    <img src="{% url 'logistica:etiqueta_corredor_preview' corredor %}" alt="Prévia da etiqueta do corredor {{ corredor }}"
+         class="w-full rounded-lg border border-slate-200 bg-white" width="1199" height="799">
+
+    <form method="post" class="mt-4 flex flex-col gap-3 sm:flex-row sm:justify-end">
+        {% csrf_token %}
+        <button type="submit" name="corredor" value="TODOS" class="btn btn-secondary min-h-11"
+                onclick="return confirm('Imprimir a etiqueta dos {{ corredores|length }} corredores?');">Imprimir todos</button>
+        <button type="submit" name="corredor" value="{{ corredor }}" class="btn min-h-11">Imprimir corredor {{ corredor }}</button>
+    </form>
+</div>
+{% endblock %}
