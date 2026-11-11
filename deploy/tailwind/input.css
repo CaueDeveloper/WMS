@@ -109,9 +109,6 @@
   .nav-link-ativo {
     @apply bg-white/15 text-white font-semibold shadow-[inset_3px_0_0_0_#fff];
   }
-  .nav-icon {
-    @apply inline-flex items-center justify-center w-5 shrink-0 text-base leading-none;
-  }
 
   /* Botões */
   .btn {
@@ -122,9 +119,6 @@
   }
   .btn-sm {
     @apply min-h-8 px-3 py-1.5 text-xs;
-  }
-  .btn-ghost {
-    @apply bg-transparent text-primary-700 shadow-none hover:bg-primary-50 active:bg-primary-100;
   }
   .btn-danger-solid {
     @apply bg-danger-600 text-white hover:bg-danger-500 active:bg-danger-600;
@@ -155,15 +149,9 @@
   .btn-block {
     @apply flex w-full;
   }
-  .btn-lg {
-    @apply text-lg py-3.5 px-6;
-  }
   .btn-secondary {
     @apply bg-white text-primary-700 border-slate-300 hover:bg-primary-50 hover:border-primary-300 active:bg-primary-100
            disabled:border-slate-200 disabled:bg-slate-100;
-  }
-  .btn-danger {
-    @apply bg-white text-danger-600 border-danger-500 hover:bg-danger-50 active:bg-danger-50;
   }
   /* Seta que esconde/mostra os paletes de um lote */
   .btn-seta {
@@ -203,20 +191,10 @@
   .input-field-lg {
     @apply text-lg py-3 px-4;
   }
-  .field-hint {
-    @apply mt-1 text-xs text-slate-600;
-  }
   .field-error {
     @apply mt-1 text-xs font-medium text-danger-600;
   }
 
-  /* Cabeçalho de página: título à esquerda, ações à direita, centralizados na vertical. */
-  .page-header {
-    @apply mb-5 flex flex-wrap items-center justify-between gap-3;
-  }
-  .page-header h2 {
-    @apply m-0 text-xl text-slate-900;
-  }
   .page-container {
     @apply mx-auto w-full max-w-6xl;
   }
@@ -285,13 +263,6 @@
   /* Variante que ocupa a largura toda da tela, com o campo centralizado dentro do cartão */
   .barra-form-cheia .form-card-body > div {
     @apply lg:mx-auto lg:w-full lg:max-w-md lg:flex-none lg:text-center;
-  }
-  /* Variante que se ajusta ao conteúdo em vez de ocupar a largura toda */
-  .barra-form-compacta {
-    @apply lg:w-fit lg:py-3;
-  }
-  .barra-form-compacta .form-card-body {
-    @apply lg:flex-none;
   }
 
   /* <dialog> com formulário: pop-up centralizado em tela grande; no celular fica sempre
@@ -443,16 +414,6 @@
     }
   }
 
-  /* Contadores de bipagem */
-  .contador-zerado {
-    @apply inline-block rounded-full px-4 py-1 font-bold whitespace-nowrap bg-danger-50 text-danger-600 border border-danger-500;
-  }
-  .contador-parcial {
-    @apply inline-block rounded-full px-4 py-1 font-bold whitespace-nowrap bg-warning-50 text-warning-600 border border-warning-500;
-  }
-  .contador-completo {
-    @apply inline-block rounded-full px-4 py-1 font-bold whitespace-nowrap bg-success-50 text-success-600 border border-success-500;
-  }
 
   /* Níveis de ocupação da grade de endereços */
   .nivel-vazio {
@@ -460,12 +421,6 @@
   }
   .nivel-baixo {
     @apply bg-emerald-100;
-  }
-  .nivel-medio {
-    @apply bg-amber-100;
-  }
-  .nivel-alto {
-    @apply bg-orange-200;
   }
   .nivel-cheio {
     @apply bg-rose-200;
