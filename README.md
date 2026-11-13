@@ -34,4 +34,4 @@ FABRICADO → TRANSFERENCIA_PRODUCAO → APROVADO_PRODUCAO → TRANSFERENCIA_LOG
 Em qualquer etapa anterior ao armazenamento, o palete pode ser reprovado, corrigido e reenviado ao fluxo.
 ## Licença
 
-Projeto proprietário. Todos os direitos reservados.
+Família do Sítio &copy 2026. Todos os direitos reservados.
