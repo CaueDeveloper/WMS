@@ -55,13 +55,13 @@
                     <div class="flex flex-wrap items-center justify-between gap-3 max-lg:w-full">
                         <span class="flex items-center gap-2 text-sm text-slate-600">
                             <button type="button" class="btn-seta" data-toggle-lote aria-expanded="false" aria-label="Mostrar ou esconder os paletes do lote {{ grupo.lote }} — {{ grupo.descricao }}">{% include 'core/_icone.html' with nome='chevron' %}</button>
-                            <span><strong>Lote {{ grupo.lote }} || {{ grupo.descricao }} || {{ grupo.total_lote }} palete{{ grupo.total_lote|pluralize }} || {{ grupo.peso_total|peso }} kg </strong>
+                            <span><strong>Lote {{ grupo.lote }} || {{ grupo.descricao }} || {{ grupo.total_lote }} palete{{ grupo.total_lote|pluralize }} || {{ grupo.peso_total|totais }} </strong>
                             <span class="{% if grupo.reprovados %}badge-danger{% elif grupo.pendentes_bipagem %}badge-warning{% else %}badge-success{% endif %}">
                                 {{ grupo.quantidade }}/{{ grupo.total_lote }}{% if grupo.reprovados %} · {{ grupo.reprovados }} reprovado{{ grupo.reprovados|pluralize }}{% endif %}
                             </span></span>
                         </span>
                         {% if pode_aprovar %}
-                        <form method="post" class="max-lg:w-full" data-confirmar-lote data-lote="{{ grupo.lote }}" data-produto="{{ grupo.descricao }}" data-fabricacao="{{ grupo.data_fabricacao|date:'d/m/Y' }}" data-etiquetas="{{ grupo.total_lote }}" data-peso="{{ grupo.peso_total|peso }} kg">
+                        <form method="post" class="max-lg:w-full" data-confirmar-lote data-lote="{{ grupo.lote }}" data-produto="{{ grupo.descricao }}" data-fabricacao="{{ grupo.data_fabricacao|date:'d/m/Y' }}" data-etiquetas="{{ grupo.total_lote }}" data-peso="{{ grupo.peso_total|totais }}">
                             {% csrf_token %}
                             <input type="hidden" name="aprovar_sku" value="{{ grupo.sku }}">
                             <input type="hidden" name="aprovar_data" value="{{ grupo.data_fabricacao|date:'Y-m-d' }}">
@@ -77,7 +77,7 @@
                 <td data-label="Palete"><div class="font-mono">{{ p.barcode_palete }}</div></td>
                 <td data-label="Produto"><div>{{ p.descricao }}</div></td>
                 <td data-label="Fabricação"><div>{{ grupo.data_fabricacao|date:'d/m/Y' }}</div></td>
-                <td data-label="Peso" class="num tabular-nums"><div>{{ p.peso_kg|peso }} kg</div></td>
+                <td data-label="Peso" class="num tabular-nums"><div>{{ p.peso_kg|quantidade:p.unidade }}</div></td>
                 <td data-label="Bipados">
                     <div>
                         {% if p.estado == 'REPROVADO' %}
@@ -181,7 +181,7 @@
                 </select>
             </div>
             <div>
-                <label for="edit-peso">Peso (kg)</label>
+                <label for="edit-peso">Quantidade</label>
                 <input type="number" name="peso_kg" id="edit-peso" step="0.001" min="0.001" class="input-field" required>
             </div>
         </div>

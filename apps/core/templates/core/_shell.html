@@ -69,6 +69,7 @@
                 <h1 class="m-0 truncate text-lg font-semibold text-slate-900">{% block titulo_pagina %}{% endblock %}</h1>
             </div>
             <div class="flex shrink-0 items-center gap-2.5">
+                {% include 'core/_notificacoes.html' %}
                 <div class="hidden text-right leading-tight sm:block">
                     <div class="text-sm font-medium text-slate-800">{{ usuario_nome }}</div>
                     <div class="max-w-48 truncate text-xs text-slate-600">{{ usuario_perfil }}</div>

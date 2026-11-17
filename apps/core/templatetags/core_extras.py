@@ -24,6 +24,43 @@ def peso(valor):
     return formatar_peso(valor)
 
 
+def formatar_quantidade(valor, unidade='kg'):
+    """Quantidade na unidade do palete: kg como peso ('500,00'); un/cx inteiros ('120')."""
+    if unidade in ('un', 'cx') and valor not in (None, ''):
+        try:
+            valor = Decimal(str(valor))
+        except InvalidOperation:
+            return valor
+        if valor == valor.to_integral_value():
+            return f'{valor:,.0f}'.replace(',', '.')
+    return formatar_peso(valor)
+
+
+@register.filter
+def quantidade(valor, unidade='kg'):
+    """`{{ palete.peso_kg|quantidade:palete.unidade }}` -> '500,00 kg' / '120 cx'."""
+    unidade = unidade or 'kg'
+    return f'{formatar_quantidade(valor, unidade)} {unidade}'
+
+
+def somar_por_unidade(itens):
+    """[(unidade, total)] na ordem kg, un, cx a partir de objetos com peso_kg/unidade."""
+    totais = {}
+    for item in itens:
+        un = getattr(item, 'unidade', None) or 'kg'
+        totais[un] = totais.get(un, Decimal('0')) + item.peso_kg
+    return [(un, totais[un]) for un in ('kg', 'un', 'cx') if un in totais] + \
+        [(un, t) for un, t in totais.items() if un not in ('kg', 'un', 'cx')]
+
+
+@register.filter
+def totais(pares):
+    """Lista de (unidade, total) -> '500,00 kg + 120 cx' ('0,00 kg' se vazia)."""
+    if not pares:
+        return '0,00 kg'
+    return ' + '.join(quantidade(total, un) for un, total in pares)
+
+
 # estado do Palete -> (rótulo curto, classe de badge). O rótulo longo fica no title.
 _ESTADO_BADGE = {
     'FABRICADO': ('Fabricado', 'badge-warning'),

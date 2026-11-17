@@ -1,4 +1,5 @@
 from .navegacao import grupos_do_usuario, menu_para
+from .notificacoes import nao_lidas
 
 
 def menu(request):
@@ -11,5 +12,6 @@ def menu(request):
         'menu_secoes': menu_para(request),
         'usuario_nome': nome,
         'usuario_iniciais': ''.join(parte[0] for parte in nome.split()[:2]).upper() or nome[:1].upper(),
+        'notificacoes_nao_lidas': nao_lidas(request.user),
         'usuario_perfil': ', '.join(nomes) if nomes else ('Superusuário' if request.user.is_superuser else 'Sem perfil'),
     }

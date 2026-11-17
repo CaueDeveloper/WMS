@@ -1,6 +1,11 @@
 from django.db import transaction
 from django.db.models import Q
+from django.urls import reverse
 from django.utils import timezone
+
+from apps.core.models import Notificacao
+from apps.core.navegacao import ADM, GESTOR_LOG, OP_LOG
+from apps.core.notificacoes import notificar_grupos
 
 from .models import Palete, registrar_historico
 
@@ -145,7 +150,26 @@ def aprovar_lote(lote, usuario=None, sku=None, data_fabricacao=None):
         estado='APROVADO_PRODUCAO', atualizado_em=agora, aprovado_producao_em=agora,
     )
     registrar_historico(paletes_do_lote, 'APROVADO_PRODUCAO', usuario=usuario)
+    _notificar_lote_aprovado_producao(paletes_do_lote, lote, sku, data_fabricacao, usuario)
     return paletes_do_lote
+
+
+def _notificar_lote_aprovado_producao(paletes, lote, sku, data_fabricacao, usuario):
+    """Avisa a Logística (operadores, gestores e administradores) que o lote foi
+    liberado pela Produção e aguarda a transferência logística."""
+    n = len(paletes)
+    descricao = next((p.descricao for p in paletes if p.descricao), '')
+    produto = f' — {descricao}' if descricao else ''
+    notificar_grupos(
+        [OP_LOG, GESTOR_LOG, ADM],
+        Notificacao.LOTE_APROVADO_PRODUCAO,
+        titulo=f'Lote {lote} aprovado pela Produção',
+        mensagem=(
+            f'Lote {_rotulo(lote, sku, data_fabricacao)}{produto}: {n} palete(s) aprovado(s) pela Produção, '
+            'aguardando a transferência na Logística.'
+        ),
+        link=reverse('producao:transferencia_logistica'),
+    )
 
 
 @transaction.atomic

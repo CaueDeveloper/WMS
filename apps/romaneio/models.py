@@ -29,7 +29,19 @@ class Romaneio(models.Model):
 
     @property
     def peso_total(self):
-        return sum(item.peso_kg for item in self.itens.all())
+        """Soma só os itens em kg (un/cx não se somam a peso) — ver `totais`."""
+        return sum((item.peso_kg for item in self.itens.all() if item.unidade == 'kg'), 0)
+
+    @property
+    def notas_canceladas(self):
+        """Notas do romaneio canceladas no SAP (usa o prefetch de `notas`)."""
+        return [n for n in self.notas.all() if n.cancelada_em]
+
+    @property
+    def totais(self):
+        """[(unidade, total)] — kg, un e cx separados."""
+        from apps.core.templatetags.core_extras import somar_por_unidade
+        return somar_por_unidade(self.itens.all())
 
 
 class RomaneioNota(models.Model):
@@ -39,6 +51,9 @@ class RomaneioNota(models.Model):
     romaneio = models.ForeignKey(Romaneio, on_delete=models.CASCADE, related_name='notas')
     docentry = models.PositiveIntegerField(unique=True)
     docnum = models.PositiveIntegerField('nota fiscal')
+    # Quando o WMS percebeu que a nota foi cancelada no SAP depois do romaneio.
+    # Enquanto preenchido, a coleta do romaneio fica bloqueada (limpar pelo admin).
+    cancelada_em = models.DateTimeField('cancelada no SAP em', null=True, blank=True)
 
     class Meta:
         ordering = ['docnum']
@@ -55,7 +70,9 @@ class RomaneioItem(models.Model):
     retirada = models.OneToOneField('producao.Retirada', on_delete=models.PROTECT, related_name='item_romaneio')
     sku = models.CharField(max_length=40)
     descricao = models.CharField(max_length=200)
+    # Quantidade retirada na `unidade` do palete (kg, un ou cx).
     peso_kg = models.DecimalField(max_digits=12, decimal_places=3)
+    unidade = models.CharField(max_length=3, default='kg')
     # Nota, linha e preço na Nota Fiscal de Saída do SAP (nulos nos romaneios antigos).
     nota = models.ForeignKey(RomaneioNota, on_delete=models.CASCADE, null=True, blank=True, related_name='itens')
     nota_linha = models.PositiveIntegerField(null=True, blank=True)
@@ -73,7 +90,7 @@ class RomaneioItem(models.Model):
         ordering = ['pk']
 
     def __str__(self):
-        return f'{self.sku} — {self.peso_kg} kg'
+        return f'{self.sku} — {self.peso_kg} {self.unidade}'
 
     @property
     def valor(self):

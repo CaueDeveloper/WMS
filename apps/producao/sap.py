@@ -95,27 +95,35 @@ class SapClient:
                        'PlannedQuantity,CompletedQuantity,ProductionOrderStatus,PostingDate',
         })
 
-    def notas_saida_com_carga(self, dias=7):
-        """Notas Fiscais de Saída (/Invoices) dos últimos `dias` dias que já têm
-        "Número da Carga" (UDF `U_WB_RouteNumber`) preenchido e não estão canceladas:
+    DIAS_NOTAS_PENDENTES = 7
+
+    @classmethod
+    def _filtro_notas_pendentes(cls):
+        """Notas lançadas (`DocDate`) nos últimos 7 dias (hoje incluso), emitidas pela
+        filial do armazém (`SAP_B1_FILIAL`), não canceladas e com "Número da Carga"
+        (`U_WB_RouteNumber`). O dia exato é escolhido na tela, pelo filtro de lançamento."""
+        desde = (date.today() - timedelta(days=cls.DIAS_NOTAS_PENDENTES - 1)).isoformat()
+        return (f"DocDate ge '{desde}' and BPL_IDAssignedToInvoice eq {int(settings.SAP_B1_FILIAL)}"
+                " and CancelStatus eq 'csNo' and U_WB_RouteNumber ne null and U_WB_RouteNumber ne ''")
+
+    def notas_saida_com_carga(self):
+        """Notas Fiscais de Saída (/Invoices) pendentes (ver `_filtro_notas_pendentes`):
         [{docentry, docnum, cardcode, cliente, data, vencimento, total, kg_total,
-        linhas: [{linha, sku, descricao, quantidade, preco}]}]. Só leitura (GET)."""
-        desde = (date.today() - timedelta(days=dias)).isoformat()
+        linhas: [{linha, sku, descricao, quantidade, unidade, preco}]}]. Só leitura (GET)."""
         brutas = self._get_todos('/Invoices', {
-            '$filter': f"DocDate ge '{desde}' and Cancelled eq 'tNO' and U_WB_RouteNumber ne null and U_WB_RouteNumber ne ''",
+            '$filter': self._filtro_notas_pendentes(),
             '$select': 'DocEntry,DocNum,CardCode,CardName,DocDate,DocDueDate,DocTotal,'
                        'U_WB_RouteNumber,DocumentLines',
             '$orderby': 'DocDate desc,DocNum desc',
         })
         return [nota for nota in map(self._nota_de, brutas) if nota]
 
-    def notas_saida_resumo(self, dias=7):
-        """Só o cabeçalho das notas de saída com carga dos últimos `dias` dias (sem as
-        linhas, que são ~25x mais lentas de baixar): [{docentry, docnum, carga,
-        cardcode, cliente, data}]. As linhas vêm de `nota_saida`, nota a nota."""
-        desde = (date.today() - timedelta(days=dias)).isoformat()
+    def notas_saida_resumo(self):
+        """Só o cabeçalho das notas de saída pendentes (sem as linhas, que são ~25x
+        mais lentas de baixar): [{docentry, docnum, carga, cardcode, cliente, data}].
+        As linhas vêm de `nota_saida`, nota a nota."""
         brutas = self._get_todos('/Invoices', {
-            '$filter': f"DocDate ge '{desde}' and Cancelled eq 'tNO' and U_WB_RouteNumber ne null and U_WB_RouteNumber ne ''",
+            '$filter': self._filtro_notas_pendentes(),
             '$select': 'DocEntry,DocNum,CardCode,CardName,DocDate,U_WB_RouteNumber',
             '$orderby': 'DocDate desc,DocNum desc',
         })
@@ -127,16 +135,40 @@ class SapClient:
 
     def nota_saida(self, docentry):
         """Uma única Nota Fiscal de Saída (mesmo formato de `notas_saida_com_carga`),
-        ou None se não existir, estiver cancelada ou sem carga/linhas."""
+        ou None se não existir, estiver cancelada, for de outra filial ou estiver sem
+        carga/linhas. "Cancelada" inclui o documento de cancelamento
+        (`CancelStatus = csCancellation`), que também fica em /Invoices: só `csNo` vale.
+        A Data de Saída não é checada aqui, para não recusar uma nota escolhida
+        pouco antes da virada do dia."""
         r = self._req('get', f'/Invoices({int(docentry)})', params={
-            '$select': 'DocEntry,DocNum,CardCode,CardName,DocDate,DocDueDate,DocTotal,Cancelled,'
-                       'U_WB_RouteNumber,DocumentLines'})
+            '$select': 'DocEntry,DocNum,CardCode,CardName,DocDate,DocDueDate,DocTotal,CancelStatus,'
+                       'BPL_IDAssignedToInvoice,U_WB_RouteNumber,DocumentLines'})
         if r.status_code == 404:
             return None
         if r.status_code != 200:
             raise SapIndisponivelError(f'SAP retornou {r.status_code} na nota {docentry}.')
         bruta = r.json()
-        return None if bruta.get('Cancelled') == 'tYES' else self._nota_de(bruta)
+        if bruta.get('CancelStatus') != 'csNo' or bruta.get('BPL_IDAssignedToInvoice') != int(settings.SAP_B1_FILIAL):
+            return None
+        return self._nota_de(bruta)
+
+    # DocEntries por consulta em `notas_canceladas` (o $filter vai na URL).
+    BLOCO_CANCELADAS = 40
+
+    def notas_canceladas(self, docentries):
+        """{DocEntry} das notas informadas que foram canceladas no SAP depois de
+        escolhidas (CancelStatus diferente de csNo). Só leitura (GET)."""
+        entradas = sorted({int(d) for d in docentries})
+        canceladas = set()
+        for i in range(0, len(entradas), self.BLOCO_CANCELADAS):
+            bloco = entradas[i:i + self.BLOCO_CANCELADAS]
+            filtro = ' or '.join(f'DocEntry eq {d}' for d in bloco)
+            brutas = self._get_todos('/Invoices', {
+                '$filter': f"({filtro}) and CancelStatus ne 'csNo'",
+                '$select': 'DocEntry',
+            })
+            canceladas |= {n['DocEntry'] for n in brutas}
+        return canceladas
 
     @staticmethod
     def _nota_de(n):
@@ -153,6 +185,8 @@ class SapClient:
                 'sku': ln['ItemCode'],
                 'descricao': ln.get('ItemDescription') or '',
                 'quantidade': quantidade,
+                # UoM de venda da linha (kg, un, cx...); casa com Palete.unidade no romaneio.
+                'unidade': str(ln.get('UoMCode') or 'kg').strip().lower(),
                 'preco': Decimal(str(ln.get('UnitPrice') or 0)),
             })
         if not linhas:
@@ -162,7 +196,7 @@ class SapClient:
             'carga': carga, 'cardcode': n.get('CardCode') or '', 'cliente': n.get('CardName') or '',
             'data': (n.get('DocDate') or '')[:10], 'vencimento': (n.get('DocDueDate') or '')[:10],
             'total': Decimal(str(n.get('DocTotal') or 0)),
-            'kg_total': sum((ln['quantidade'] for ln in linhas), Decimal('0')),
+            'kg_total': sum((ln['quantidade'] for ln in linhas if ln['unidade'] == 'kg'), Decimal('0')),
             'linhas': linhas,
         }
 

@@ -27,7 +27,7 @@
             <th>Lote</th>
             <th>Fabricação</th>
             <th class="num">Qtd. paletes</th>
-            <th class="num">Peso total</th>
+            <th class="num">Total</th>
         </tr>
     </thead>
     <tbody>
@@ -38,7 +38,7 @@
             <td>{{ grupo.lote }}</td>
             <td>{% for d in grupo.datas_fabricacao %}{{ d|date:'d/m/Y' }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
             <td class="num">{{ grupo.quantidade }}</td>
-            <td class="num">{{ grupo.peso_total|peso }} kg</td>
+            <td class="num">{{ grupo.peso_total|totais }}</td>
         </tr>
         {% endfor %}
     </tbody>

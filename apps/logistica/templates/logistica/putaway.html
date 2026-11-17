@@ -10,7 +10,7 @@
     <div class="card mb-4">
         <p class="text-lg lg:text-base font-semibold text-slate-800 mb-1">Lote {{ lote }} — {{ paletes.0.sku }}</p>
         <p class="texto-coletor text-slate-600 mb-1">{{ paletes.0.descricao }}</p>
-        <p class="texto-coletor text-slate-600 mb-2">{{ quantidade }} palete(s) — {{ peso_total|peso }} kg</p>
+        <p class="texto-coletor text-slate-600 mb-2">{{ quantidade }} palete(s) — {{ peso_total|totais }}</p>
         <details>
             <summary class="cursor-pointer font-semibold text-sm">Ver barcodes</summary>
             <ul class="list-none mt-2 pl-0 text-sm">
@@ -65,7 +65,7 @@
                     <th>Lote</th>
                     <th>SKU</th>
                     <th>Descrição</th>
-                    <th class="num">Peso (kg)</th>
+                    <th class="num">Quantidade</th>
                 </tr>
             </thead>
             <tbody>
@@ -75,7 +75,7 @@
                     <td>{{ palete.lote }}</td>
                     <td>{{ palete.sku }}</td>
                     <td>{{ palete.descricao }}</td>
-                    <td class="num">{{ palete.peso_kg|peso }}</td>
+                    <td class="num">{{ palete.peso_kg|quantidade:palete.unidade }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

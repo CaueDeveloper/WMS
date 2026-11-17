@@ -21,24 +21,27 @@ class MapaEstoqueTests(TestCase):
         u.groups.add(Group.objects.get_or_create(name='Administradores')[0])
         self.client.force_login(u)
 
-    def test_visoes_modos_e_filtros(self):
+    def test_tela_unica_e_filtros(self):
         url = reverse('logistica:mapa_estoque')
-        for modo in ('simples', 'complexo'):
-            for visao in ('ocupacao', 'andares', 'corredores', 'guardas', 'geral'):
-                for extra in ({}, {'andar': 2, 'corredor': 'B', 'guarda': 3, 'nivel': 'inativo'}, {'nivel': 'ocupado'}):
-                    r = self.client.get(url, {'visao': visao, 'modo': modo, **extra}, secure=True)
-                    self.assertEqual(r.status_code, 200, (visao, modo, extra))
-        r = self.client.get(url, {'visao': 'geral', 'modo': 'simples', 'andar': 1}, secure=True)
-        self.assertContains(r, '001-02-A-01-01')
-        self.assertNotContains(r, '001-02-A-02-01')
-        r = self.client.get(url, {'visao': 'corredores', 'corredor': 'A'}, secure=True)
-        self.assertContains(r, 'Corredor A')
-        self.assertNotContains(r, 'Corredor B')
-        r = self.client.get(url, {'visao': 'bogus', 'modo': 'x', 'andar': '99'}, secure=True)
-        self.assertEqual(r.context['visao'], 'ocupacao')
-        self.assertEqual(r.context['modo'], 'simples')
+        for extra in ({}, {'andar': 2, 'corredor': 'B', 'guarda': 3, 'nivel': 'inativo'}, {'nivel': 'ocupado'}):
+            r = self.client.get(url, extra, secure=True)
+            self.assertEqual(r.status_code, 200, extra)
+        r = self.client.get(url, secure=True)
+        # ocupação geral e mapa 3D na mesma tela, sem abas, sem modo de exibição e sem o corte do 3D
+        self.assertContains(r, 'Ocupação geral')
+        self.assertContains(r, 'id="mapa3d"')
+        self.assertNotContains(r, 'Exibição')
+        self.assertNotContains(r, 'mapa3d-andares')
+        # sem busca, botões de câmera e filtro de guarda
+        self.assertNotContains(r, 'mapa3d-busca')
+        self.assertNotContains(r, 'data-camera')
+        self.assertNotContains(r, 'name="guarda"')
+        self.assertNotContains(r, 'Inativ')
+        r = self.client.get(url, {'andar': 1}, secure=True)
+        self.assertEqual([i['andar'] for i in r.context['por_andar']], [1])
+        r = self.client.get(url, {'andar': '99'}, secure=True)
         self.assertIsNone(r.context['filtros']['andar'])
-        r = self.client.get(url, {'visao': 'guardas', 'nivel': 'inativo'}, secure=True)
+        r = self.client.get(url, {'nivel': 'inativo'}, secure=True)
         self.assertEqual(r.context['resumo']['total'], 1)
 
 
@@ -60,7 +63,7 @@ class MapaEstoque3DTests(TestCase):
 
     def test_visao_3d_renderiza(self):
         self._login('Administradores')
-        r = self.client.get(reverse('logistica:mapa_estoque'), {'visao': '3d'}, secure=True)
+        r = self.client.get(reverse('logistica:mapa_estoque'), secure=True)
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, 'id="mapa3d"')
         self.assertContains(r, 'three.module.min')
@@ -243,3 +246,72 @@ class ConsultaCorredorTests(TestCase):
         self.assertIsNone(r.context['corredor'])
         r = self.client.get(self.url, {'modo': 'corredor'}, secure=True)
         self.assertEqual(r.status_code, 200)
+
+
+class EsteiraFifoTests(TestCase):
+    """Cada corredor/andar é uma esteira: sai pela guarda 01 e os de trás avançam."""
+
+    def setUp(self):
+        from decimal import Decimal
+        from apps.producao.models import Palete
+
+        self.Palete, self.Decimal = Palete, Decimal
+        for corredor in 'AB':
+            for pos in range(1, 5):
+                Endereco.objects.create(corredor=corredor, andar=1, posicao=pos,
+                                        codigo=Endereco.montar_codigo(corredor, 1, pos))
+        self.fila = [self._palete('A', pos) for pos in (1, 2, 3)]
+        self.outra = self._palete('B', 2)
+
+    def _palete(self, corredor, pos):
+        endereco = Endereco.objects.get(corredor=corredor, andar=1, posicao=pos)
+        return self.Palete.objects.create(estado='ARMAZENADO', endereco=endereco, sku='S', descricao='Item',
+                                          lote=f'L{corredor}{pos}', peso_kg=100)
+
+    def _guardas(self, paletes):
+        for p in paletes:
+            p.refresh_from_db()
+        return [p.endereco.posicao if p.endereco else None for p in paletes]
+
+    def test_esvaziar_o_da_frente_faz_os_de_tras_avancarem(self):
+        from apps.logistica.services import retirar_peso_do_palete
+
+        retirar_peso_do_palete(self.fila[0], 100)
+        self.assertEqual(self._guardas(self.fila), [None, 1, 2])
+        self.assertEqual(self._guardas([self.outra]), [2])  # outra esteira não muda
+
+    def test_avanco_nao_colide_quando_o_de_tras_foi_cadastrado_antes(self):
+        """O banco confere "um palete por endereço" linha a linha: se o palete de trás
+        tem pk menor, ele seria movido antes de liberar a guarda da frente."""
+        from apps.logistica.services import compactar_fila
+
+        antigo, meio, novo = self.fila  # pks crescentes, guardas 01/02/03
+        guarda = {p: Endereco.objects.get(corredor='A', andar=1, posicao=p) for p in (1, 3)}
+        # o de pk menor vai para o fundo (03) e a guarda 01 fica vazia
+        self.Palete.objects.filter(pk=novo.pk).update(endereco=None, estado='RETIRADO')
+        self.Palete.objects.filter(pk=antigo.pk).update(endereco=guarda[3])
+        self.assertEqual(compactar_fila('A', 1), 2)
+        self.assertEqual(self._guardas([meio, antigo]), [1, 2])
+
+    def test_retirada_parcial_nao_move_ninguem(self):
+        from apps.logistica.services import retirar_peso_do_palete
+
+        retirar_peso_do_palete(self.fila[0], 40)
+        self.assertEqual(self._guardas(self.fila), [1, 2, 3])
+
+    def test_guarda_inativa_e_pulada(self):
+        from apps.logistica.services import retirar_peso_do_palete
+
+        Endereco.objects.filter(corredor='A', andar=1, posicao=2).update(ativo=False)
+        retirar_peso_do_palete(self.fila[0], 100)
+        # os paletes das guardas 02 e 03 vão para 01 e 03 (a 02 inativa fica vazia)
+        self.assertEqual(self._guardas(self.fila[1:]), [1, 3])
+
+    def test_putaway_entra_no_fundo_da_esteira(self):
+        from apps.logistica.services import alocar_lote, retirar_peso_do_palete
+
+        retirar_peso_do_palete(self.fila[0], 100)
+        novo = self.Palete.objects.create(estado='APROVADO_LOGISTICA', sku='S', descricao='Item', lote='NOVO',
+                                          peso_kg=100)
+        alocar_lote('NOVO', 'A', 1)
+        self.assertEqual(self._guardas(self.fila[1:] + [novo]), [1, 2, 3])

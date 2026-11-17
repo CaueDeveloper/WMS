@@ -12,20 +12,11 @@
         <a class="btn mt-3" href="{{ url_limpar }}">Limpar filtros</a>
     </div>
 {% else %}
-    {% if visao != 'ocupacao' %}{% include 'logistica/_mapa_resumo.html' %}{% endif %}
+    {% include 'logistica/_mapa_ocupacao.html' %}
 
-    {% if visao == 'ocupacao' %}
-        {% include 'logistica/_mapa_ocupacao.html' %}
-    {% elif visao == 'andares' %}
-        {% include 'logistica/_mapa_andares.html' with codigo_completo=False %}
-    {% elif visao == 'corredores' %}
-        {% include 'logistica/_mapa_corredores.html' %}
-    {% elif visao == 'guardas' %}
-        {% include 'logistica/_mapa_guardas.html' %}
-    {% elif visao == '3d' %}
+    <section class="mt-6" aria-labelledby="titulo-mapa3d">
+        <h2 id="titulo-mapa3d" class="mb-3 text-sm text-slate-600">Mapa 3D</h2>
         {% include 'logistica/_mapa_3d.html' %}
-    {% else %}
-        {% include 'logistica/_mapa_andares.html' with codigo_completo=True %}
-    {% endif %}
+    </section>
 {% endif %}
 {% endblock %}

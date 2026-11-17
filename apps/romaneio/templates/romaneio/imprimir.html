@@ -38,6 +38,7 @@
     .assinaturas div { padding-top: 4px; border-top: 1px solid #000; text-align: center; }
     .assinaturas small { display: block; color: #555; }
     .recebido { margin-top: 28px; break-inside: avoid; }
+    .cancelada { margin: 12px 0 0; padding: 8px 10px; border: 2px solid #b91c1c; color: #b91c1c; font-weight: bold; font-size: 14px; }
     .rodape { margin-top: 20px; color: #555; font-size: 10px; text-align: right; }
     @media print {
         body { padding: 0; }
@@ -64,15 +65,19 @@
         </div>
     </header>
 
+    {% with canceladas=romaneio.notas_canceladas %}{% if canceladas %}
+    <p class="cancelada">ATENÇÃO: nota(s) {% for n in canceladas %}{{ n.docnum }}{% if not forloop.last %}, {% endif %}{% endfor %} cancelada(s) no SAP. Não expedir sem autorização.</p>
+    {% endif %}{% endwith %}
+
     <section class="dados">
         <div><small>Notas fiscais</small><b>{% for n in romaneio.notas.all %}{{ n.docnum }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</b></div>
         <div><small>Data</small><b>{{ romaneio.data|date:"d/m/Y" }}</b></div>
         <div><small>Emitido por</small><b>{% firstof romaneio.criado_por.get_full_name romaneio.criado_por.username %}</b></div>
-        <div><small>Paletes / Peso total</small><b>{{ romaneio.itens.all|length }} / {{ romaneio.peso_total|peso }} kg</b></div>
+        <div><small>Paletes / Total</small><b>{{ romaneio.itens.all|length }} / {{ romaneio.totais|totais }}</b></div>
     </section>
 
     <table>
-        <thead><tr><th style="width:32px">#</th><th>Produto</th><th>SKU</th><th>Palete</th><th class="num">Peso (kg)</th></tr></thead>
+        <thead><tr><th style="width:32px">#</th><th>Produto</th><th>SKU</th><th>Palete</th><th class="num">Quantidade</th></tr></thead>
         <tbody>
             {% for item in romaneio.itens.all %}
             <tr>
@@ -80,11 +85,11 @@
                 <td>{{ item.descricao }}</td>
                 <td>{{ item.sku }}</td>
                 <td class="mono">{{ item.retirada.palete.barcode_palete }}</td>
-                <td class="num">{{ item.peso_kg|peso }}</td>
+                <td class="num">{{ item.peso_kg|quantidade:item.unidade }}</td>
             </tr>
             {% endfor %}
         </tbody>
-        <tfoot><tr><th colspan="4">Peso total</th><th class="num">{{ romaneio.peso_total|peso }} kg</th></tr></tfoot>
+        <tfoot><tr><th colspan="4">Total</th><th class="num">{{ romaneio.totais|totais }}</th></tr></tfoot>
     </table>
 
     <section class="assinaturas">

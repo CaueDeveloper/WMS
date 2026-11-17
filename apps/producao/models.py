@@ -5,6 +5,10 @@ from django.db import models
 from django.utils import timezone
 
 
+UNIDADE_CHOICES = [('kg', 'kg'), ('un', 'un'), ('cx', 'cx')]
+UNIDADES_CONTAVEIS = ('un', 'cx')  # quantidades inteiras
+
+
 def gerar_barcode_palete():
     return f'PLT-{uuid.uuid4().hex[:12].upper()}'
 
@@ -25,7 +29,10 @@ class Palete(models.Model):
     sku = models.CharField(max_length=40)
     descricao = models.CharField(max_length=200)
     lote = models.CharField(max_length=60)
+    # Quantidade do palete na `unidade` dele (kg, un ou cx). O nome ficou
+    # `peso_kg` por compatibilidade — para un/cx é a contagem de unidades/caixas.
     peso_kg = models.DecimalField(max_digits=12, decimal_places=3)
+    unidade = models.CharField(max_length=3, choices=UNIDADE_CHOICES, default='kg')
     # Nulo apenas para paletes anteriores à introdução do campo.
     data_fabricacao = models.DateField(null=True, blank=True)
     # Informada pela Produção na emissão; nulo para paletes anteriores ao campo.

@@ -22,6 +22,7 @@ from .services import (
     coletar_item,
     confirmar_coleta,
     criar_romaneio_de_notas,
+    marcar_notas_canceladas,
     nota_com_disponibilidade,
     notas_com_disponibilidade,
     resumo_pendente,
@@ -37,14 +38,47 @@ def _pode_gerir(user):
     return user.is_superuser or user.groups.filter(name__in=GRUPOS_ROMANEIO).exists()
 
 
+CACHE_CANCELADAS_SEGUNDOS = 60
+
+
+def _conferir_cancelamentos(romaneios, forcar=False):
+    """Pergunta ao SAP se alguma nota (ainda não marcada) destes romaneios foi
+    cancelada e marca as que foram. Resultado em cache por 60 s para o mesmo
+    conjunto de notas (`forcar` ignora o cache). Devolve False se o SAP estiver
+    fora (fica valendo o que já está gravado)."""
+    pendentes = sorted({n.docentry for r in romaneios for n in r.notas.all() if not n.cancelada_em})
+    if not pendentes:
+        return True
+    chave = 'romaneio:canceladas:' + ','.join(map(str, pendentes))
+    canceladas = None if forcar else cache.get(chave)
+    if canceladas is None:
+        try:
+            with sap.SapClient() as cliente:
+                canceladas = cliente.notas_canceladas(pendentes)
+        except SapIndisponivelError:
+            return False
+        cache.set(chave, canceladas, CACHE_CANCELADAS_SEGUNDOS)
+    if canceladas:
+        marcar_notas_canceladas(canceladas)
+        agora = timezone.now()
+        for r in romaneios:  # reflete na página sem consultar o banco de novo
+            for n in r.notas.all():
+                if n.docentry in canceladas and not n.cancelada_em:
+                    n.cancelada_em = agora
+    return True
+
+
 @group_required(*GRUPOS_CONSULTA)
 def lista(request):
     romaneios = (
         Romaneio.objects.select_related('criado_por')
         .prefetch_related('itens', 'notas')
     )
+    pagina = Paginator(romaneios, ITENS_POR_PAGINA).get_page(request.GET.get('pg'))
+    if not _conferir_cancelamentos(list(pagina)):
+        messages.warning(request, 'Não foi possível conferir no SAP se alguma nota foi cancelada.')
     return render(request, 'romaneio/lista.html', {
-        'romaneios': Paginator(romaneios, ITENS_POR_PAGINA).get_page(request.GET.get('pg')),
+        'romaneios': pagina,
         'pode_gerir': _pode_gerir(request.user),
     })
 
@@ -130,6 +164,7 @@ def detalhe(request, pk):
     pendentes = [i for i in itens if not i.coletado_em]
     return render(request, 'romaneio/detalhe.html', {
         'romaneio': romaneio,
+        'canceladas': romaneio.notas_canceladas,
         'itens': itens,
         'filas': _filas_de_coleta(pendentes),
         'coletados_lista': [i for i in itens if i.coletado_em],
@@ -141,13 +176,9 @@ def detalhe(request, pk):
 
 def _filas_de_coleta(pendentes):
     """Itens pendentes por corredor e andar. Em cada fila, o primeiro é o da frente
-    (o último armazenado sai primeiro); os demais esperam atrás dele."""
-    def desde(item):
-        palete = item.retirada.palete
-        return palete.armazenado_em or palete.criado_em
-
+    (menor guarda; a guarda 01 é a saída da esteira); os demais esperam atrás dele."""
     grupos = {}
-    for item in sorted(pendentes, key=lambda i: (desde(i), i.pk), reverse=True):
+    for item in sorted(pendentes, key=lambda i: (i.posicao or 0, i.pk)):
         grupos.setdefault((item.corredor, item.andar), []).append(item)
     filas = [{
         'corredor': corredor, 'andar': andar, 'proximo': itens[0], 'atras': itens[1:],
@@ -163,6 +194,8 @@ def coletar(request, pk):
     romaneio = get_object_or_404(Romaneio, pk=pk)
     try:
         if request.POST.get('acao') == 'confirmar':
+            # Última conferência no SAP antes de liberar a saída (SAP fora: vale o já gravado).
+            _conferir_cancelamentos([Romaneio.objects.prefetch_related('notas').get(pk=romaneio.pk)], forcar=True)
             confirmar_coleta(romaneio, request.user)
             messages.success(request, f'Coleta do romaneio {romaneio.pk} confirmada.')
         else:

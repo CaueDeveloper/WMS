@@ -23,7 +23,7 @@ Sistema de controle de estoque por lote para a transição entre Produção e Lo
 - **Banco:** SQLite3 em desenvolvimento, MySQL em produção — troca ocorre apenas no bloco `DATABASES` de `wms/settings.py`
 - **Frontend:** Views Django tradicionais, HTML5 + CSS3 puro (sem SPA). Layout otimizado para o pior caso: coletor Zebra MC2700 (4", 800×480)
 - **Impressão:** Zebra ZT421 via ZPL bruto, socket TCP/IP porta `9100`
-- **Notificação:** integração Z-API/WhatsApp **removida** (PRD D8); não há `whatsapp.py`
+- **Notificação:** integração Z-API/WhatsApp **removida** (PRD D8); não há `whatsapp.py`. Há notificações **in-app** (sino no topbar de `core/_shell.html`, model `apps/core/models.py::Notificacao`, serviço `apps/core/notificacoes.py::notificar_grupos`, adiado para `on_commit`). Evento atual: lote aprovado pela Produção (`aprovar_lote`) → Operador/Gestor Logística + Administradores (inclusive o autor, se estiver num desses grupos). Novo evento = novo `tipo` em `Notificacao.TIPO_CHOICES` + chamada a `notificar_grupos` no serviço da etapa
 - **Coleta:** Zebra DataWedge em modo emulação de teclado (o scanner dispara `Enter` automático — os formulários devem oferecer bipagem contínua com `autofocus`)
 - **Auth:** LDAP/AD (`django-auth-ldap`) sobre Django Auth; 5 `auth.Group` (`Administradores`, `Operador Produção`, `Gestor Produção`, `Operador Logística`, `Gestor Logística`) e o decorator `apps.core.decorators.group_required`
 

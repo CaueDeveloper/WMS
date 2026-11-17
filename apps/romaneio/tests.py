@@ -42,8 +42,14 @@ def _nota(docentry, linhas, cliente='Mercado X'):
     }
 
 
-def _fake_sap(notas=None, erro=None):
+def _fake_sap(notas=None, erro=None, canceladas=()):
     class FakeSap:
+        consultas = []
+
+        def notas_canceladas(self, docentries):
+            FakeSap.consultas.append(list(docentries))
+            return set(canceladas) & set(docentries)
+
         def __enter__(self):
             if erro:
                 raise erro
@@ -97,9 +103,16 @@ class RomaneioTests(TestCase):
         r = self._get(self.notas)
         for texto in ('100</span>', 'CARGA-1', 'name="nota" value="1"'):
             self.assertContains(r, texto)
-        for texto in ('Mercado X', 'CLI', 'Lançamento'):  # sem cliente nem data na escolha da nota
+        for texto in ('Mercado X', 'CLI'):  # sem cliente na escolha da nota
             self.assertNotContains(r, texto)
         self.assertNotContains(r, 'Café 1KG')  # as linhas só vêm ao escolher a nota
+
+    def test_busca_e_so_por_carga_e_data_de_lancamento(self):
+        r = self._get(self.notas)
+        self.assertContains(r, 'data-busca="CARGA-1"')  # o nº da nota não entra na busca
+        self.assertContains(r, 'data-data="2026-11-01"')
+        self.assertContains(r, 'id="rm-data"')
+        self.assertContains(r, '01/11/2026')
 
     def test_itens_de_nota_inexistente_ou_ja_romaneada_dao_404(self):
         self.assertEqual(self._item(self.notas, 999).status_code, 404)
@@ -135,7 +148,7 @@ class RomaneioTests(TestCase):
         for texto in ('Café 1KG', '>100<', f'Romaneio {romaneio.pk} criado.'):
             self.assertContains(detalhe, texto)
         # conferência cega: nada de cliente nem datas da nota
-        for texto in ('Mercado X', 'C1', 'Cliente', 'Lançamento', 'Vencimento', '01/11/2026'):
+        for texto in ('Mercado X', '>C1<', 'Cliente', 'Lançamento', 'Vencimento', '01/11/2026'):
             self.assertNotContains(detalhe, texto)
 
     def test_varias_notas_no_mesmo_romaneio(self):
@@ -192,7 +205,7 @@ class RomaneioTests(TestCase):
         self.assertEqual(Romaneio.objects.count(), 0)  # 400 kg > 300 kg no mapa
 
     def _fila(self, corredor, andar, n, sku='MILHO'):
-        """n paletes de 100 kg no mesmo corredor/andar; o índice 0 é o mais antigo (o último a sair)."""
+        """n paletes de 100 kg no mesmo corredor/andar; o índice 0 é o mais antigo, na guarda 01 (o primeiro a sair)."""
         base = timezone.now() - timedelta(days=100)
         return [
             _palete_armazenado(
@@ -202,14 +215,21 @@ class RomaneioTests(TestCase):
             for i in range(n)
         ]
 
-    def test_saida_automatica_comeca_pelos_paletes_mais_novos(self):
+    def test_saida_automatica_comeca_pelos_paletes_da_frente(self):
         fila = self._fila('C', 1, 3)
         nota = _nota(8, [_linha(0, 'MILHO', 'Milho', '250')])
         self._post([nota], nota=8)
         for palete in fila:
             palete.refresh_from_db()
         self.assertEqual([(p.estado, p.peso_kg) for p in fila],
-                         [('ARMAZENADO', 50), ('RETIRADO', 0), ('RETIRADO', 0)])
+                         [('RETIRADO', 0), ('RETIRADO', 0), ('ARMAZENADO', 50)])
+        self.assertEqual(fila[2].endereco.posicao, 1)  # o de trás avançou para a frente
+        # a coleta registra onde cada palete estava ao criar o romaneio
+        r = Romaneio.objects.get()
+        self.assertEqual(sorted(i.posicao for i in r.itens.all()), [1, 2, 3])
+        filas = self.client.get(reverse('romaneio:detalhe', args=[r.pk]), secure=True).context['filas']
+        self.assertEqual(filas[0]['proximo'].retirada.palete, fila[0])
+        self.assertEqual([i.posicao for i in filas[0]['atras']], [2, 3])
 
     def test_plano_mostra_so_os_paletes_necessarios(self):
         fila = self._fila('C', 1, 3)  # 3 x 100 kg
@@ -217,7 +237,7 @@ class RomaneioTests(TestCase):
         ln = self._item([nota], 20).context['nota']['linhas'][0]
         self.assertEqual((ln['status'], ln['pct'], ln['faltante']), ('ok', 100, 0))
         self.assertEqual([(p['barcode'], p['kg_usar']) for p in ln['paletes']],
-                         [(fila[2].barcode_palete, 100), (fila[1].barcode_palete, 50)])
+                         [(fila[0].barcode_palete, 100), (fila[1].barcode_palete, 50)])
 
     def test_plano_parcial_e_linhas_do_mesmo_sku_nao_reusam_palete(self):
         self._fila('C', 1, 2)  # 200 kg
@@ -242,14 +262,16 @@ class RomaneioTests(TestCase):
         self.assertNotContains(resp, 'Preço')
         self.assertContains(resp, 'data-leitor-qr="barcode_palete"')
         self.assertContains(resp, 'type="hidden" id="barcode_palete"')  # sem digitação do código
-        self.assertNotContains(resp, 'M0')  # lote/palete não aparecem
+        self.assertNotContains(resp, '>M0<')  # lote/palete não aparecem (sem casar com o token CSRF)
 
     def test_estoque_preso_atras_de_outro_produto_nao_e_liberado(self):
-        self._fila('C', 1, 1)  # MILHO, mais antigo: fica atrás
         _palete_armazenado(
-            2, corredor='C', andar=1, sku='FEIJAO', descricao='Feijão', lote='F9', peso_kg=100,
+            1, corredor='C', andar=1, sku='FEIJAO', descricao='Feijão', lote='F9', peso_kg=100,
             armazenado_em=timezone.now(),
-        )
+        )  # FEIJÃO na frente (guarda 01)
+        _palete_armazenado(
+            2, corredor='C', andar=1, sku='MILHO', descricao='Milho', lote='M9', peso_kg=100,
+        )  # MILHO atrás: fica preso
         nota = _nota(9, [_linha(0, 'MILHO', 'Milho', '10')])
         self.assertContains(self._item([nota], 9), 'Preso por outro produto')
         self._post([nota], nota=9)
@@ -296,7 +318,7 @@ class RomaneioTests(TestCase):
         imp = self.client.get(reverse('romaneio:imprimir', args=[r.pk]), secure=True)
         for texto in ('100, 101', 'Café 1KG', 'Açúcar'):
             self.assertContains(imp, texto)
-        for texto in ('Mercado X', 'C1', 'Cliente', 'Lançamento', 'Vencimento', 'R$', 'Preço'):
+        for texto in ('Mercado X', '>C1<', 'Cliente', 'Lançamento', 'Vencimento', 'R$', 'Preço'):
             self.assertNotContains(imp, texto)
 
     def test_coleta_e_confirmacao(self):
@@ -343,6 +365,139 @@ class RomaneioTests(TestCase):
         self.assertContains(self.client.get(reverse('home'), secure=True), reverse('romaneio:lista'))
 
 
+class NotaCanceladaTests(TestCase):
+    """Nota cancelada no SAP depois de entrar no romaneio: alerta e bloqueia a coleta."""
+
+    def setUp(self):
+        cache.clear()
+        self.gestor = _usuario('Gestor Logística')
+        self.client.force_login(self.gestor)
+        _palete_armazenado(1, sku='CAFE', descricao='Café 1KG', lote='L1', peso_kg=500)
+        self.notas = [_nota(1, [_linha(0, 'CAFE', 'Café 1KG', '100')])]
+        with _fake_sap(self.notas):
+            self.client.post(reverse('romaneio:novo'), {'data': '2026-10-28', 'nota': 1}, secure=True)
+        self.romaneio = Romaneio.objects.get()
+        self.item = self.romaneio.itens.get()
+        self.nota = self.romaneio.notas.get()
+
+    def _lista(self, canceladas=(), erro=None):
+        with _fake_sap(self.notas, erro=erro, canceladas=canceladas):
+            return self.client.get(reverse('romaneio:lista'), secure=True)
+
+    def _coletar_tudo(self):
+        self.client.post(reverse('romaneio:coletar', args=[self.romaneio.pk]),
+                         {'barcode_palete': self.item.retirada.palete.barcode_palete}, secure=True)
+
+    def _confirmar(self, canceladas=()):
+        with _fake_sap(self.notas, canceladas=canceladas):
+            self.client.post(reverse('romaneio:coletar', args=[self.romaneio.pk]), {'acao': 'confirmar'}, secure=True)
+        self.romaneio.refresh_from_db()
+
+    def test_lista_marca_e_mostra_nota_cancelada(self):
+        r = self._lista(canceladas={1})
+        self.nota.refresh_from_db()
+        self.assertIsNotNone(self.nota.cancelada_em)
+        self.assertContains(r, 'Nota cancelada')
+        self.assertContains(r, '100 (cancelada)')
+
+    def test_lista_sem_cancelamento_nao_marca(self):
+        r = self._lista()
+        self.nota.refresh_from_db()
+        self.assertIsNone(self.nota.cancelada_em)
+        self.assertNotContains(r, 'Nota cancelada')
+
+    def test_lista_com_sap_fora_avisa_e_segue(self):
+        r = self._lista(erro=SapIndisponivelError('fora'))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'Não foi possível conferir no SAP')
+
+    def test_nota_ja_marcada_nao_e_consultada_de_novo(self):
+        self.nota.cancelada_em = timezone.now()
+        self.nota.save()
+        with _fake_sap(self.notas) as fake:
+            self.client.get(reverse('romaneio:lista'), secure=True)
+        self.assertEqual(fake.consultas, [])
+
+    def test_detalhe_e_impressao_mostram_alerta_e_bloqueiam(self):
+        self._lista(canceladas={1})
+        det = self.client.get(reverse('romaneio:detalhe', args=[self.romaneio.pk]), secure=True)
+        self.assertContains(det, 'cancelada(s) no SAP')
+        self.assertContains(det, 'coleta bloqueada')
+        imp = self.client.get(reverse('romaneio:imprimir', args=[self.romaneio.pk]), secure=True)
+        self.assertContains(imp, 'Não expedir sem autorização')
+
+    def test_confirmacao_consulta_sap_e_bloqueia(self):
+        self._coletar_tudo()
+        self._confirmar(canceladas={1})
+        self.assertEqual(self.romaneio.status, 'ABERTO')
+        self.nota.refresh_from_db()
+        self.assertIsNotNone(self.nota.cancelada_em)
+
+    def test_confirmacao_ignora_cache_da_lista(self):
+        self._lista()  # cache: "nada cancelado"
+        self._coletar_tudo()
+        self._confirmar(canceladas={1})  # cancelada logo depois: a confirmação percebe
+        self.assertEqual(self.romaneio.status, 'ABERTO')
+
+    def test_confirmacao_normal_e_com_sap_fora(self):
+        self._coletar_tudo()
+        with _fake_sap(erro=SapIndisponivelError('fora')):
+            self.client.post(reverse('romaneio:coletar', args=[self.romaneio.pk]), {'acao': 'confirmar'}, secure=True)
+        self.romaneio.refresh_from_db()
+        self.assertEqual(self.romaneio.status, 'COLETADO')
+
+    def test_servico_bloqueia_mesmo_sem_sap(self):
+        from .services import ColetaError, confirmar_coleta
+        self._coletar_tudo()
+        self.nota.cancelada_em = timezone.now()
+        self.nota.save()
+        with self.assertRaisesMessage(ColetaError, 'Nota(s) 100 cancelada(s) no SAP'):
+            confirmar_coleta(self.romaneio, self.gestor)
+
+    def test_admin_limpa_e_libera(self):
+        self.nota.cancelada_em = timezone.now()
+        self.nota.save()
+        self._coletar_tudo()
+        self.nota.cancelada_em = None  # o superusuário limpou pelo admin
+        self.nota.save()
+        self._confirmar()
+        self.assertEqual(self.romaneio.status, 'COLETADO')
+
+
+class RomaneioUnidadeTests(TestCase):
+    """A linha da nota só é atendida por paletes da mesma unidade (kg, un, cx)."""
+
+    def setUp(self):
+        self.usuario = _usuario('Gestor Logística')
+
+    def _nota_cx(self, qtd='50'):
+        return _nota(1, [{**_linha(0, 'CAFE', 'Café', qtd), 'unidade': 'cx'}])
+
+    def test_palete_em_kg_nao_atende_linha_em_caixas(self):
+        from .services import notas_com_disponibilidade
+        _palete_armazenado(1, sku='CAFE', descricao='Café', lote='L1', peso_kg=Decimal('500'))
+        nota = notas_com_disponibilidade([self._nota_cx()])[0]
+        self.assertFalse(nota['atendivel'])
+        self.assertEqual((nota['faltas'][0]['unidade'], nota['faltas'][0]['motivo']), ('cx', 'Sem estoque no mapa'))
+
+    def test_palete_em_caixas_atende_e_grava_unidade(self):
+        from .services import criar_romaneio_de_notas
+        cx = _palete_armazenado(1, sku='CAFE', descricao='Café', lote='L1', peso_kg=Decimal('120'), unidade='cx')
+        _palete_armazenado(2, sku='CAFE', descricao='Café', lote='L1', peso_kg=Decimal('500'))  # atrás (kg)
+        romaneio = criar_romaneio_de_notas(self.usuario, timezone.localdate(), [self._nota_cx('50')])
+        item = romaneio.itens.get()
+        self.assertEqual((item.retirada.palete_id, item.unidade, item.peso_kg), (cx.pk, 'cx', Decimal('50')))
+        cx.refresh_from_db()
+        self.assertEqual(cx.peso_kg, Decimal('70'))
+        self.assertEqual(romaneio.totais, [('cx', Decimal('50'))])
+
+    def test_linha_sem_unidade_continua_em_kg(self):
+        from .services import notas_com_disponibilidade
+        _palete_armazenado(1, sku='CAFE', descricao='Café', lote='L1', peso_kg=Decimal('500'))
+        nota = notas_com_disponibilidade([_nota(1, [_linha(0, 'CAFE', 'Café', '100')])])[0]
+        self.assertTrue(nota['atendivel'])
+
+
 class ImpressaoTests(TestCase):
     def setUp(self):
         self.gestor = _usuario('Gestor Logística')
@@ -366,7 +521,7 @@ class ImpressaoTests(TestCase):
         self.client.force_login(self.gestor)
         url = reverse('romaneio:detalhe', args=[self.romaneio.pk])
         palete = self.romaneio.itens.first().retirada.palete
-        link = f'visao=3d&amp;destacar={palete.barcode_palete}'
+        link = f'?destacar={palete.barcode_palete}'
         self.assertContains(self.client.get(url, secure=True), link)
         palete.estado = 'RETIRADO'
         palete.save(update_fields=['estado'])

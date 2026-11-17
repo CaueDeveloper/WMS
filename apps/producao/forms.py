@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from apps.logistica.models import Produto
 
-from .models import Palete
+from .models import UNIDADE_CHOICES, UNIDADES_CONTAVEIS, Palete
 
 ESTADOS_LOTE_EM_PRODUCAO = ('FABRICADO', 'TRANSFERENCIA_PRODUCAO', 'REPROVADO')
 
@@ -29,6 +29,20 @@ class RecebimentoForm(forms.Form):
         queryset=Produto.objects.filter(ativo=True),
         label='Produto',
         widget=forms.Select(attrs={'autofocus': True, 'class': _CLASSE_CAMPO}),
+    )
+    unidade = forms.ChoiceField(
+        label='Unidade de medida',
+        choices=UNIDADE_CHOICES,
+        initial='kg',
+        required=False,  # ausente (formulário antigo) = kg
+        widget=forms.Select(attrs={'class': _CLASSE_CAMPO}),
+    )
+    # Só em un/cx: em kg o palete usa o peso fixo (PESO_FIXO_RECEBIMENTO_KG).
+    quantidade_palete = forms.IntegerField(
+        label='Quantidade por palete',
+        required=False,
+        min_value=1,
+        widget=forms.NumberInput(attrs={'autocomplete': 'off', 'class': _CLASSE_CAMPO, 'min': '1', 'step': '1'}),
     )
     lote = forms.CharField(
         label='Lote',
@@ -66,6 +80,9 @@ class RecebimentoForm(forms.Form):
             raise forms.ValidationError('A data de fabricação não pode ser futura.')
         return data
 
+    def clean_unidade(self):
+        return self.cleaned_data.get('unidade') or 'kg'
+
     def clean_lote(self):
         lote = self.cleaned_data['lote'].strip().upper()
         if not LOTE_VALIDO.match(lote):
@@ -79,18 +96,29 @@ class RecebimentoForm(forms.Form):
 
     def clean(self):
         cleaned_data = super().clean()
+        contavel = cleaned_data.get('unidade') in UNIDADES_CONTAVEIS
+        if contavel and not cleaned_data.get('quantidade_palete') and 'quantidade_palete' not in self.errors:
+            self.add_error('quantidade_palete', 'Informe a quantidade por palete.')
+        if not contavel:
+            cleaned_data['quantidade_palete'] = None
         if cleaned_data.get('peso_variavel') and cleaned_data.get('quantidade'):
-            self._validar_peso_ultimo(cleaned_data)
+            self._validar_peso_ultimo(cleaned_data, contavel)
         _validar_vencimento(self, cleaned_data)
         return cleaned_data
 
-    def _validar_peso_ultimo(self, cleaned_data):
-        """Peso variável: só o último palete tem peso próprio (campo `peso_ultimo`); os demais usam o fixo."""
-        campo = forms.DecimalField(max_digits=12, decimal_places=3, min_value=Decimal('0.001'))
+    def _validar_peso_ultimo(self, cleaned_data, contavel):
+        """Peso variável: só o último palete tem peso (ou, em un/cx, quantidade) próprio
+        (campo `peso_ultimo`); os demais usam o fixo / a quantidade por palete."""
+        if contavel:
+            campo = forms.IntegerField(min_value=1)
+            erro = 'Informe uma quantidade inteira (maior que zero) para o último palete.'
+        else:
+            campo = forms.DecimalField(max_digits=12, decimal_places=3, min_value=Decimal('0.001'))
+            erro = 'Informe um peso válido (maior que zero) para o último palete.'
         try:
-            cleaned_data['peso_ultimo'] = campo.clean(self.data.get('peso_ultimo', ''))
+            cleaned_data['peso_ultimo'] = Decimal(campo.clean(self.data.get('peso_ultimo', '')))
         except forms.ValidationError:
-            self.add_error(None, 'Informe um peso válido (maior que zero) para o último palete.')
+            self.add_error(None, erro)
 
 
 class CorrecaoPaleteForm(forms.Form):
@@ -102,7 +130,7 @@ class CorrecaoPaleteForm(forms.Form):
         widget=forms.Select(attrs={'class': 'input-field'}),
     )
     peso_kg = forms.DecimalField(
-        label='Peso (kg)',
+        label='Quantidade',
         max_digits=12,
         decimal_places=3,
         min_value=Decimal('0.001'),

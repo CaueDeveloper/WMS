@@ -40,8 +40,8 @@ class PaleteCriacaoForm(forms.ModelForm):
 
 @admin.register(Palete)
 class PaleteAdmin(SomenteLeituraAdmin):
-    list_display = ('barcode_palete', 'sku', 'lote', 'peso_kg', 'estado', 'endereco', 'criado_em')
-    list_filter = ('estado',)
+    list_display = ('barcode_palete', 'sku', 'lote', 'peso_kg', 'unidade', 'estado', 'endereco', 'criado_em')
+    list_filter = ('estado', 'unidade')
     search_fields = ('barcode_palete', 'sku', 'lote')
 
     def has_add_permission(self, request):

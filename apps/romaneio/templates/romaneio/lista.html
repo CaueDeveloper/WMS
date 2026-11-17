@@ -16,16 +16,16 @@
 <div class="overflow-x-auto mb-4">
     <table class="table-admin tabela-responsiva">
         <thead>
-            <tr><th>Nº</th><th>Notas</th><th>Data</th><th>Criado por</th><th class="num">Peso (kg)</th></tr>
+            <tr><th>Nº</th><th>Notas</th><th>Data</th><th>Criado por</th><th class="num">Total</th></tr>
         </thead>
         <tbody>
             {% for r in romaneios %}
             <tr>
-                <td data-label="Nº"><div><a class="text-primary-700 underline-offset-2 hover:underline" href="{% url 'romaneio:detalhe' r.pk %}">{{ r.pk }}</a></div></td>
-                <td data-label="Notas"><div>{% for n in r.notas.all %}{{ n.docnum }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</div></td>
+                <td data-label="Nº"><div><a class="text-primary-700 underline-offset-2 hover:underline" href="{% url 'romaneio:detalhe' r.pk %}">{{ r.pk }}</a>{% if r.notas_canceladas %} <span class="ml-1 inline-block rounded-full px-2 text-xs font-bold" style="background:#fee2e2;color:#b91c1c">Nota cancelada</span>{% endif %}</div></td>
+                <td data-label="Notas"><div>{% for n in r.notas.all %}{% if n.cancelada_em %}<span class="font-semibold" style="color:#b91c1c" title="Cancelada no SAP">{{ n.docnum }} (cancelada)</span>{% else %}{{ n.docnum }}{% endif %}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</div></td>
                 <td data-label="Data"><div>{{ r.data|date:"d/m/Y" }}</div></td>
                 <td data-label="Criado por"><div>{% firstof r.criado_por.get_full_name r.criado_por.username %}</div></td>
-                <td data-label="Peso (kg)" class="num"><div>{{ r.peso_total|peso }}</div></td>
+                <td data-label="Total" class="num"><div>{{ r.totais|totais }}</div></td>
             </tr>
             {% endfor %}
         </tbody>

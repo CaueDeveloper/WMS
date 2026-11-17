@@ -6,12 +6,18 @@
 
 {% block shell_content %}
 {% include 'core/_ficha_css.html' %}
+{% if canceladas %}
+<div class="cl-cancelada" role="alert">
+    <strong>Nota(s) {% for n in canceladas %}{{ n.docnum }}{% if not forloop.last %}, {% endif %}{% endfor %} cancelada(s) no SAP.</strong>
+    {% if romaneio.status == 'ABERTO' %}A coleta está bloqueada. Fale com o administrador antes de expedir.{% else %}A coleta já tinha sido confirmada: confira se a mercadoria saiu.{% endif %}
+</div>
+{% endif %}
 <dl class="ficha mb-6 max-w-3xl">
     {% if romaneio.notas.all %}
-    <div class="ficha-item largo"><dt>Notas fiscais</dt><dd>{% for n in romaneio.notas.all %}{{ n.docnum }}{% if not forloop.last %}, {% endif %}{% endfor %}</dd></div>
+    <div class="ficha-item largo"><dt>Notas fiscais</dt><dd>{% for n in romaneio.notas.all %}{{ n.docnum }}{% if n.cancelada_em %} <span class="cl-selo">cancelada</span>{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}</dd></div>
     {% endif %}
     <div class="ficha-item"><dt>Data do romaneio</dt><dd>{{ romaneio.data|date:"d/m/Y" }}</dd></div>
-    <div class="ficha-item"><dt>Peso total</dt><dd>{{ romaneio.peso_total|peso }} kg</dd></div>
+    <div class="ficha-item"><dt>Total</dt><dd>{{ romaneio.totais|totais }}</dd></div>
 </dl>
 
 {% if romaneio.status == 'ABERTO' %}
@@ -39,9 +45,9 @@
             {% if fila.atras %}<span class="cl-atras">+{{ fila.atras|length }} na fila</span>{% endif %}
         </header>
         <div class="cl-produto">{{ fila.proximo.descricao }}</div>
-        <div class="cl-detalhe"><span class="cl-sku">{{ fila.proximo.sku }}</span><strong>{{ fila.proximo.peso_kg|peso }} kg</strong></div>
+        <div class="cl-detalhe"><span class="cl-sku">{{ fila.proximo.sku }}</span><strong>{{ fila.proximo.peso_kg|quantidade:fila.proximo.unidade }}</strong></div>
         {% if fila.no_mapa %}
-        <a class="cl-mapa no-underline" href="{% url 'logistica:mapa_estoque' %}?visao=3d&amp;destacar={{ fila.proximo.retirada.palete.barcode_palete|urlencode }}">Ver no mapa</a>
+        <a class="cl-mapa no-underline" href="{% url 'logistica:mapa_estoque' %}?destacar={{ fila.proximo.retirada.palete.barcode_palete|urlencode }}">Ver no mapa</a>
         {% endif %}
     </article>
     {% endfor %}
@@ -55,7 +61,7 @@
     <summary>Já coletados ({{ coletados_lista|length }})</summary>
     <ul>
         {% for item in coletados_lista %}
-        <li><span>{{ item.descricao }} <small>{{ item.sku }}</small></span><span>{{ item.peso_kg|peso }} kg · {{ item.coletado_em|date:"H:i" }}</span></li>
+        <li><span>{{ item.descricao }} <small>{{ item.sku }}</small></span><span>{{ item.peso_kg|quantidade:item.unidade }} · {{ item.coletado_em|date:"H:i" }}</span></li>
         {% endfor %}
     </ul>
 </details>
@@ -64,18 +70,18 @@
 <h2 class="cl-titulo">Itens</h2>
 <div class="overflow-x-auto mb-4">
     <table class="table-admin tabela-responsiva">
-        <thead><tr><th>Produto</th><th>SKU</th><th class="num">Peso (kg)</th><th>Coleta</th></tr></thead>
+        <thead><tr><th>Produto</th><th>SKU</th><th class="num">Quantidade</th><th>Coleta</th></tr></thead>
         <tbody>
             {% for item in itens %}
             <tr>
                 <td data-label="Produto"><div>{{ item.descricao }}</div></td>
                 <td data-label="SKU"><div>{{ item.sku }}</div></td>
-                <td data-label="Peso (kg)" class="num"><div>{{ item.peso_kg|peso }}</div></td>
+                <td data-label="Quantidade" class="num"><div>{{ item.peso_kg|quantidade:item.unidade }}</div></td>
                 <td data-label="Coleta"><div>{% if item.coletado_em %}Coletado {{ item.coletado_em|date:"d/m H:i" }}{% else %}Pendente{% endif %}</div></td>
             </tr>
             {% endfor %}
         </tbody>
-        <tfoot><tr><th colspan="2">Peso total</th><th class="num">{{ romaneio.peso_total|peso }} kg</th><th></th></tr></tfoot>
+        <tfoot><tr><th colspan="2">Total</th><th class="num">{{ romaneio.totais|totais }}</th><th></th></tr></tfoot>
     </table>
 </div>
 {% endif %}
@@ -84,7 +90,7 @@
     {% if romaneio.status == 'ABERTO' %}
     <form method="post" action="{% url 'romaneio:coletar' romaneio.pk %}">
         {% csrf_token %}<input type="hidden" name="acao" value="confirmar">
-        <button type="submit" class="btn min-h-11"{% if faltam %} disabled title="Falta coletar {{ faltam }} item(ns)"{% endif %}>Confirmar coleta</button>
+        <button type="submit" class="btn min-h-11"{% if canceladas %} disabled title="Nota cancelada no SAP: coleta bloqueada"{% elif faltam %} disabled title="Falta coletar {{ faltam }} item(ns)"{% endif %}>Confirmar coleta</button>
     </form>
     {% endif %}
     {% if romaneio.status == 'COLETADO' %}
@@ -119,6 +125,9 @@
 .cl-feitos ul{list-style:none;margin:.5rem 0 0;padding:0;display:grid;gap:.3rem}
 .cl-feitos li{display:flex;justify-content:space-between;gap:1rem;font-size:.85rem;color:#475569;border-top:1px solid #f1f5f9;padding-top:.3rem}
 .cl-feitos small{color:#94a3b8}
+.cl-cancelada{max-width:42rem;margin-bottom:1rem;padding:.9rem 1rem;border-radius:1rem;background:#fef2f2;border:1px solid #fecaca;border-left:5px solid #b91c1c;color:#7f1d1d}
+.cl-cancelada strong{display:block;color:#b91c1c}
+.cl-selo{display:inline-block;padding:.05rem .45rem;border-radius:999px;background:#fee2e2;color:#b91c1c;font-size:.72rem;font-weight:700}
 </style>
 {% if romaneio.status == 'ABERTO' %}
 <script src="{% static 'core/js/jsQR.js' %}"></script>

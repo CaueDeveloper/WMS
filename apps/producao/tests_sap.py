@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from unittest import mock
 
@@ -132,12 +132,75 @@ class NotasSaidaSapTests(TestCase):
         self.assertEqual((nota['total'], nota['kg_total']), (Decimal('300.5'), Decimal('15.5')))
         self.assertEqual([(ln['linha'], ln['sku'], ln['quantidade'], ln['preco']) for ln in nota['linhas']],
                          [(0, 'CAFE', Decimal('10'), Decimal('20')), (1, 'ACUCAR', Decimal('5.5'), Decimal('18'))])
-        self.assertIn("Cancelled eq 'tNO'", chamada.call_args.args[1]['$filter'])
+        filtro = chamada.call_args.args[1]['$filter']
+        desde = (date.today() - timedelta(days=6)).isoformat()  # últimos 7 dias, hoje incluso
+        for trecho in (f"DocDate ge '{desde}'", 'BPL_IDAssignedToInvoice eq 1',
+                       "CancelStatus eq 'csNo'", "U_WB_RouteNumber ne ''"):
+            self.assertIn(trecho, filtro)
+        self.assertNotIn('U_TX_DtSaid', filtro)
+
+    def test_filtro_usa_a_filial_configurada(self):
+        from .sap import SapClient
+        with self.settings(SAP_B1_FILIAL=2), \
+                mock.patch.object(SapClient, '__init__', lambda self: None), \
+                mock.patch.object(SapClient, '_get_todos', return_value=[]) as chamada:
+            SapClient().notas_saida_resumo()
+        self.assertIn('BPL_IDAssignedToInvoice eq 2', chamada.call_args.args[1]['$filter'])
+
+    def test_unidade_da_linha_e_kg_total_so_em_kg(self):
+        linhas = [
+            {'LineNum': 0, 'ItemCode': 'CAFE', 'Quantity': 10, 'UnitPrice': 20, 'UoMCode': 'kg'},
+            {'LineNum': 1, 'ItemCode': 'CAFE', 'Quantity': 3, 'UnitPrice': 50, 'UoMCode': 'CX'},
+            {'LineNum': 2, 'ItemCode': 'COMBO', 'Quantity': 2, 'UnitPrice': 9, 'UoMCode': 'Manual'},
+            {'LineNum': 3, 'ItemCode': 'ACUCAR', 'Quantity': 4, 'UnitPrice': 1},  # sem UoM = kg
+        ]
+        notas, _ = self._consultar([self._nota(1, carga='C-1', DocumentLines=linhas)])
+        self.assertEqual([ln['unidade'] for ln in notas[0]['linhas']], ['kg', 'cx', 'manual', 'kg'])
+        self.assertEqual(notas[0]['kg_total'], Decimal('14'))
 
     def test_so_notas_com_numero_da_carga(self):
         notas, _ = self._consultar([self._nota(1, carga='CARGA-9'), self._nota(2, carga=''),
                                     self._nota(3, carga='  '), self._nota(4), self._nota(5, carga=' 77 ')])
         self.assertEqual([(n['docentry'], n['carga']) for n in notas], [(1, 'CARGA-9'), (5, '77')])
+
+    def _nota_saida(self, bruta):
+        from .sap import SapClient
+        bruta.setdefault('BPL_IDAssignedToInvoice', 1)
+        resposta = mock.Mock(status_code=200, json=lambda: bruta)
+        with mock.patch.object(SapClient, '__init__', lambda self: None), \
+                mock.patch.object(SapClient, '_req', return_value=resposta) as chamada:
+            return SapClient().nota_saida(bruta['DocEntry']), chamada
+
+    def test_nota_saida_so_aceita_cancelstatus_csno(self):
+        nota, chamada = self._nota_saida(self._nota(1, carga='C-1', CancelStatus='csNo'))
+        self.assertEqual(nota['docentry'], 1)
+        self.assertIn('CancelStatus', chamada.call_args.kwargs['params']['$select'])
+        for status in ('csYes', 'csCancellation', None):  # cancelada, doc. de cancelamento, sem status
+            self.assertIsNone(self._nota_saida(self._nota(1, carga='C-1', CancelStatus=status))[0], status)
+
+    def test_nota_saida_de_outra_filial_e_recusada(self):
+        nota = self._nota(1, carga='C-1', CancelStatus='csNo', BPL_IDAssignedToInvoice=2)
+        self.assertIsNone(self._nota_saida(nota)[0])
+        _, chamada = self._nota_saida(self._nota(1, carga='C-1', CancelStatus='csNo'))
+        self.assertIn('BPL_IDAssignedToInvoice', chamada.call_args.kwargs['params']['$select'])
+
+    def test_notas_canceladas_em_blocos(self):
+        from .sap import SapClient
+        with mock.patch.object(SapClient, '__init__', lambda self: None), \
+                mock.patch.object(SapClient, '_get_todos', side_effect=[[{'DocEntry': 3}], [{'DocEntry': 45}]]) as chamada:
+            canceladas = SapClient().notas_canceladas(range(1, 46))
+        self.assertEqual(canceladas, {3, 45})
+        self.assertEqual(chamada.call_count, 2)  # 45 notas = blocos de 40 + 5
+        filtro = chamada.call_args_list[1].args[1]['$filter']
+        self.assertEqual(filtro, "(DocEntry eq 41 or DocEntry eq 42 or DocEntry eq 43 or DocEntry eq 44 "
+                                 "or DocEntry eq 45) and CancelStatus ne 'csNo'")
+
+    def test_notas_canceladas_sem_notas_nao_consulta(self):
+        from .sap import SapClient
+        with mock.patch.object(SapClient, '__init__', lambda self: None), \
+                mock.patch.object(SapClient, '_get_todos') as chamada:
+            self.assertEqual(SapClient().notas_canceladas([]), set())
+        chamada.assert_not_called()
 
     def test_nota_sem_linhas_validas_some(self):
         notas, _ = self._consultar([self._nota(1, carga='C-1', DocumentLines=[{'LineNum': 0, 'ItemCode': 'X', 'Quantity': 0}])])

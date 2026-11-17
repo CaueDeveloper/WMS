@@ -72,7 +72,7 @@ def renderizar_preview(palete):
     # Grade: Lote | Peso | Fabricação | Hora (bordas compartilhadas, como no ZPL)
     celulas = (
         ('LOTE', c['lote'], c['lote_altura']),
-        ('PESO (KG)', c['peso'], 40),
+        (c['rotulo_qtd'], c['peso'], 40),
         ('FABRICAÇÃO', c['data'], 40),
         ('HORA', c['hora'], 40),
     )

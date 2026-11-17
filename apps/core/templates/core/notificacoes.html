@@ -1,0 +1,44 @@
+{% extends 'core/_shell.html' %}
+
+{% block title %}Notificações — WMS{% endblock %}
+{% block titulo_pagina %}Notificações{% endblock %}
+
+{% block shell_content %}
+<div class="mb-4 flex items-center justify-between gap-3">
+    <p class="text-sm text-slate-600">Avisos das etapas do fluxo que dependem da sua função.</p>
+    {% if nao_lidas %}
+    <form method="post" action="{% url 'notificacoes_ler_todas' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-secondary shrink-0">Marcar todas como lidas</button>
+    </form>
+    {% endif %}
+</div>
+
+{% if not pagina.object_list %}
+<div class="card-plain text-center text-sm text-slate-500">Nenhuma notificação.</div>
+{% else %}
+<ul class="card-plain m-0 mb-4 list-none divide-y divide-slate-100 p-0">
+    {% for n in pagina %}
+    <li class="flex items-start gap-3 px-4 py-3{% if not n.lida %} bg-primary-50{% endif %}">
+        <span class="mt-1.5 h-2 w-2 shrink-0 rounded-full {% if n.lida %}bg-transparent{% else %}bg-primary-600{% endif %}" aria-hidden="true"></span>
+        <div class="min-w-0 flex-1">
+            <div class="text-sm text-slate-900{% if not n.lida %} font-semibold{% endif %}">{{ n.titulo }}</div>
+            <div class="mt-0.5 text-sm text-slate-600">{{ n.mensagem }}</div>
+            <div class="mt-1 text-xs text-slate-400">{{ n.criada_em|date:'d/m/Y H:i' }}{% if n.lida %} · lida em {{ n.lida_em|date:'d/m/Y H:i' }}{% endif %}</div>
+        </div>
+        {% if n.link %}
+            {% if n.lida %}
+            <a class="btn btn-secondary btn-sm shrink-0" href="{{ n.link }}">Abrir</a>
+            {% else %}
+            <form method="post" action="{% url 'notificacao_ler' n.pk %}" class="shrink-0">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm">Abrir</button>
+            </form>
+            {% endif %}
+        {% endif %}
+    </li>
+    {% endfor %}
+</ul>
+{% include 'core/_paginacao.html' with prefixo='?pg=' %}
+{% endif %}
+{% endblock %}

@@ -9,6 +9,7 @@ from django.urls import reverse
 from urllib.parse import parse_qs, urlencode, urlparse
 
 from apps.core.decorators import group_required
+from apps.core.templatetags.core_extras import somar_por_unidade
 from apps.producao.models import Palete
 
 from .etiqueta_preview import renderizar_preview_corredor
@@ -23,7 +24,6 @@ from .zpl import disparar_impressao_corredores_async
 CORREDORES = Endereco.CORREDORES
 ANDARES = list(Endereco.ANDARES)
 POSICOES = Endereco.POSICOES
-ITENS_POR_PAGINA_MAPA = 100
 ITENS_POR_PAGINA_BUSCA = 20
 
 
@@ -246,7 +246,7 @@ def putaway(request):
         'lote': lote,
         'paletes': paletes,
         'quantidade': quantidade,
-        'peso_total': sum(p.peso_kg for p in paletes) if paletes else None,
+        'peso_total': somar_por_unidade(paletes) if paletes else None,
         'grade': _construir_grade(andar, vagas_necessarias=1 if modo_parcial else quantidade) if paletes else None,
         'grade_titulo': f'Andar {andar}',
         'posicoes': POSICOES,
@@ -262,16 +262,7 @@ def putaway(request):
     })
 
 
-VISOES_MAPA = (
-    ('ocupacao', 'Ocupação geral', 'chart'),
-    ('andares', 'Andares', 'layers'),
-    ('corredores', 'Corredores', 'columns'),
-    ('guardas', 'Guardas', 'cube'),
-    ('geral', 'Visão geral', 'map'),
-    ('3d', 'Mapa 3D', 'cube'),
-)
 NIVEIS_MAPA = (('livre', 'Livre'), ('ocupado', 'Ocupado'), ('inativo', 'Inativo'))
-MODOS_MAPA = (('simples', 'Simples'), ('complexo', 'Complexo'))
 
 
 def _estado_endereco(endereco):
@@ -355,26 +346,10 @@ def _agrupar(enderecos, chave):
     return grupos
 
 
-def _grade_do_andar(enderecos):
-    """Grade (corredor × guarda) só com os corredores e guardas presentes em
-    `enderecos` (os já filtrados de um andar). Células sem endereço são None."""
-    por_posicao = {(e.corredor, e.posicao): e for e in enderecos}
-    corredores = [c for c in CORREDORES if any(e.corredor == c for e in enderecos)]
-    posicoes = sorted({e.posicao for e in enderecos})
-    linhas = [
-        {'corredor': corredor, 'celulas': [por_posicao.get((corredor, posicao)) for posicao in posicoes]}
-        for corredor in corredores
-    ]
-    return {'posicoes': posicoes, 'linhas': linhas}
-
-
 def _url_mapa(parametros, **alterar):
-    """URL do mapa com os parâmetros atuais, sobrescrevendo/removendo (valor
-    None) os de `alterar`. Mudar qualquer coisa que não seja a página volta
-    para a página 1."""
+    """URL do mapa com os filtros atuais, sobrescrevendo/removendo (valor
+    None) os de `alterar`."""
     novos = {**parametros, **alterar}
-    if 'pg' not in alterar:
-        novos.pop('pg', None)
     novos = {k: v for k, v in novos.items() if v not in (None, '')}
     base = reverse('logistica:mapa_estoque')
     return f'{base}?{urlencode(novos)}' if novos else base
@@ -394,88 +369,38 @@ def _opcoes(parametros, chave, valores, atual):
 
 @group_required('Administradores', 'Gestor Produção', 'Operador Logística', 'Gestor Logística')
 def mapa_estoque(request):
-    visao = request.GET.get('visao')
-    visao = visao if visao in {v[0] for v in VISOES_MAPA} else 'ocupacao'
-    modo = request.GET.get('modo')
-    modo = modo if modo in dict(MODOS_MAPA) else 'simples'
+    """Mapa de Estoque: ocupação geral + mapa 3D na mesma tela, com os mesmos
+    filtros (o 3D lê a querystring da página)."""
     filtros = _filtros_mapa(request.GET)
-
-    parametros = {'visao': visao, 'modo': modo}
-    parametros.update({k: v for k, v in filtros.items() if v is not None})
+    parametros = {k: v for k, v in filtros.items() if v is not None}
 
     enderecos = _enderecos_mapa(filtros)
     corredores_existentes = Endereco.objects.values_list('corredor', flat=True).distinct()
     contexto = {
-        'visao': visao,
         'destacar': request.GET.get('destacar', '').strip()[:50],
-        'modo': modo,
         'filtros': filtros,
         'tem_filtro': any(v is not None for v in filtros.values()),
         'resumo': _resumir_enderecos(enderecos),
-        'visoes': [
-            {'chave': chave, 'rotulo': rotulo, 'icone': icone,
-             'url': _url_mapa(parametros, visao=chave), 'ativo': chave == visao}
-            for chave, rotulo, icone in VISOES_MAPA
-        ],
-        'modos': [
-            {'chave': chave, 'rotulo': rotulo, 'url': _url_mapa(parametros, modo=chave), 'ativo': chave == modo}
-            for chave, rotulo in MODOS_MAPA
-        ],
-        'url_limpar': _url_mapa({'visao': visao, 'modo': modo}),
+        'url_limpar': _url_mapa({}),
         'filtros_ativos': [
             {'rotulo': rotulo(filtros[chave]), 'url': _url_mapa(parametros, **{chave: None})}
             for chave, rotulo in _ROTULOS_FILTRO.items()
             if filtros[chave] is not None
         ],
         'opcoes_andar': _opcoes(parametros, 'andar', [(a, f'Andar {a}') for a in ANDARES], filtros['andar']),
-        'opcoes_nivel': _opcoes(parametros, 'nivel', NIVEIS_MAPA, filtros['nivel']),
+        # "Inativo" não aparece como opção no Mapa de Estoque.
+        'opcoes_nivel': _opcoes(parametros, 'nivel', NIVEIS_MAPA[:2], filtros['nivel']),
         'opcoes_corredor': _opcoes(
             parametros, 'corredor', [(c, c) for c in CORREDORES if c in set(corredores_existentes)], filtros['corredor'],
-        ),
-        'opcoes_guarda': _opcoes(parametros, 'guarda', [(p, f'{p:02d}') for p in POSICOES], filtros['guarda']),
-    }
-
-    if visao == 'ocupacao':
-        contexto['por_andar'] = [
+        ),        'por_andar': [
             {
                 'andar': andar,
                 'resumo': _resumir_enderecos(itens),
-                'url': _url_mapa(parametros, visao='andares', andar=andar),
+                'url': _url_mapa(parametros, andar=andar),
             }
             for andar, itens in sorted(_agrupar(enderecos, 'andar').items())
-        ]
-    elif visao in ('andares', 'geral'):
-        contexto['andares_grade'] = [
-            {'andar': andar, 'resumo': _resumir_enderecos(itens), 'grade': _grade_do_andar(itens)}
-            for andar, itens in sorted(_agrupar(enderecos, 'andar').items())
-        ]
-    elif visao == 'corredores':
-        contexto['corredores'] = [
-            {
-                'corredor': corredor,
-                'resumo': _resumir_enderecos(itens),
-                'url': _url_mapa(parametros, visao='guardas', corredor=corredor),
-                'por_andar': [
-                    {'andar': andar, 'resumo': _resumir_enderecos(sub)}
-                    for andar, sub in sorted(_agrupar(itens, 'andar').items())
-                ],
-            }
-            for corredor, itens in sorted(_agrupar(enderecos, 'corredor').items())
-        ]
-    else:
-        pagina = Paginator(enderecos, ITENS_POR_PAGINA_MAPA).get_page(request.GET.get('pg'))
-        barcodes = dict(
-            Palete.objects.filter(estado='ARMAZENADO', endereco__in=[e.pk for e in pagina])
-            .values_list('endereco_id', 'barcode_palete')
-        )
-        for endereco in pagina:
-            endereco.barcode = barcodes.get(endereco.pk)
-        contexto['pagina'] = pagina
-        contexto['url_anterior'] = (
-            _url_mapa(parametros, pg=pagina.previous_page_number()) if pagina.has_previous() else None
-        )
-        contexto['url_proximo'] = _url_mapa(parametros, pg=pagina.next_page_number()) if pagina.has_next() else None
-
+        ],
+    }
     return render(request, 'logistica/mapa_estoque.html', contexto)
 
 

@@ -284,3 +284,5 @@ SAP_B1_USERNAME = os.environ.get('SAP_B1_USERNAME', '')
 SAP_B1_PASSWORD = os.environ.get('SAP_B1_PASSWORD', '')
 SAP_B1_TIMEOUT = int(os.environ.get('SAP_B1_TIMEOUT_MS', '30000')) / 1000
 SAP_B1_VERIFY_TLS = _bool_env('SAP_B1_REJECT_UNAUTHORIZED', True)
+# Filial (BPL) do armazém do WMS: só as notas emitidas por ela entram no romaneio.
+SAP_B1_FILIAL = int(os.environ.get('SAP_B1_FILIAL', '1'))

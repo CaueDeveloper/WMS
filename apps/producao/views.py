@@ -14,6 +14,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.core.decorators import group_required
+from apps.core.templatetags.core_extras import somar_por_unidade
 from apps.logistica.models import Produto
 
 from .forms import CorrecaoPaleteForm, RecebimentoForm
@@ -32,6 +33,16 @@ SEP_CHAVE = '|'  # separa lote e SKU na chave de um grupo (aprovação e relató
 PALETES_RECENTES_NA_TELA = 20
 
 
+def _quantidades(dados):
+    """Quantidade de cada palete a emitir, na unidade escolhida: kg usa o peso fixo,
+    un/cx a quantidade digitada; com "peso variável", só o último tem valor próprio."""
+    base = PESO_FIXO_RECEBIMENTO_KG if dados['unidade'] == 'kg' else Decimal(dados['quantidade_palete'])
+    quantidades = [base] * dados['quantidade']
+    if dados['peso_variavel']:
+        quantidades[-1] = dados['peso_ultimo']
+    return quantidades
+
+
 @group_required('Administradores', 'Operador Produção', 'Gestor Produção')
 @require_POST
 def previsualizar_etiqueta(request):
@@ -40,13 +51,11 @@ def previsualizar_etiqueta(request):
     if not form.is_valid():
         return HttpResponse('Dados inválidos.', status=400, content_type='text/plain; charset=utf-8')
     dados = form.cleaned_data
-    peso_kg = PESO_FIXO_RECEBIMENTO_KG
-    if dados['peso_variavel'] and dados['quantidade'] == 1:
-        peso_kg = dados['peso_ultimo']
+    peso_kg = _quantidades(dados)[0]  # com 1 palete, já é o "último" (peso variável)
     produto = dados['produto']
     palete = Palete(
         sku=produto.sku, descricao=produto.descricao, lote=dados['lote'], peso_kg=peso_kg,
-        data_fabricacao=dados['data_fabricacao'], data_vencimento=dados['data_vencimento'],
+        unidade=dados['unidade'], data_fabricacao=dados['data_fabricacao'], data_vencimento=dados['data_vencimento'],
         barcode_palete=BARCODE_EXEMPLO,
     )
     png = renderizar_preview(palete)
@@ -65,14 +74,13 @@ def producao(request):
             quantidade = form.cleaned_data['quantidade']
             data_fabricacao = form.cleaned_data['data_fabricacao']
             data_vencimento = form.cleaned_data['data_vencimento']
-            pesos = [PESO_FIXO_RECEBIMENTO_KG] * quantidade
-            if form.cleaned_data['peso_variavel']:
-                pesos[-1] = form.cleaned_data['peso_ultimo']  # só o último palete tem peso próprio
+            pesos = _quantidades(form.cleaned_data)
+            unidade = form.cleaned_data['unidade']
 
             paletes = [
                 Palete(
                     sku=produto.sku, descricao=produto.descricao, lote=lote,
-                    peso_kg=peso_kg, data_fabricacao=data_fabricacao, data_vencimento=data_vencimento,
+                    peso_kg=peso_kg, unidade=unidade, data_fabricacao=data_fabricacao, data_vencimento=data_vencimento,
                 )
                 for peso_kg in pesos
             ]
@@ -169,7 +177,7 @@ def _agrupar_por_lote(paletes):
             'sku': sku,
             'descricao': itens[0].descricao,
             'quantidade': len(itens),
-            'peso_total': sum(p.peso_kg for p in itens),
+            'peso_total': somar_por_unidade(itens),
             'paletes': itens,
         })
     return grupos

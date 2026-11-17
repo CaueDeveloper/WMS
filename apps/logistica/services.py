@@ -26,7 +26,9 @@ class PesoInvalidoError(Exception):
 def alocar_lote(lote, corredor, andar, usuario=None, permitir_parcial=False):
     """Aloca os paletes APROVADO_LOGISTICA de `lote` nas primeiras posições
     livres (por `posicao`) do corredor/andar escolhido pelo usuário no
-    Put-away — cada palete ocupa uma posição própria (capacidade 1). Trava as
+    Put-away — cada palete ocupa uma posição própria (capacidade 1). Como a
+    fila é mantida encostada na guarda 01 (`compactar_fila`), as livres ficam
+    no fundo: o palete novo entra atrás do último da esteira. Trava as
     linhas do Palete primeiro (antes de travar Endereco), mesma ordem de
     `retirar_peso_do_palete`, para não abrir risco de deadlock. A escolha de
     quais paletes alocar primeiro (quando nem todos cabem) segue
@@ -122,7 +124,9 @@ def retirar_peso_do_palete(palete, peso_kg, usuario=None):
 
     palete.peso_kg -= peso_kg
     campos = ['peso_kg', 'atualizado_em']
+    fila = None
     if palete.peso_kg == 0:
+        fila = (palete.endereco.corredor, palete.endereco.andar)
         palete.endereco = None
         palete.estado = 'RETIRADO'
         palete.retirado_em = timezone.now()
@@ -131,4 +135,35 @@ def retirar_peso_do_palete(palete, peso_kg, usuario=None):
     retirada = Retirada.objects.create(palete=palete, peso_kg=peso_kg, saldo_kg=palete.peso_kg, usuario=usuario)
     if palete.estado == 'RETIRADO':
         registrar_historico([palete], 'RETIRADO', usuario=usuario)
+        compactar_fila(*fila)  # os de trás avançam na esteira
     return retirada
+
+
+@transaction.atomic
+def compactar_fila(corredor, andar):
+    """Cada corredor/andar é uma esteira de fluxo: o palete entra pelo fundo e
+    sai pela frente (guarda 01). Quando uma vaga abre, os paletes de trás
+    deslizam para a frente: o i-ésimo palete ARMAZENADO (na ordem das guardas)
+    passa para o i-ésimo endereço ativo — guardas inativas são puladas, como no
+    put-away. Trava os endereços do corredor/andar (mesma trava de
+    `alocar_lote`). Devolve quantos paletes mudaram de guarda."""
+    enderecos = list(
+        Endereco.objects.select_for_update()
+        .filter(corredor=corredor, andar=andar, ativo=True)
+        .order_by('posicao')
+    )
+    paletes = list(
+        Palete.objects.filter(estado='ARMAZENADO', endereco__corredor=corredor, endereco__andar=andar)
+        .order_by('endereco__posicao', 'pk')
+    )
+    movidos = []
+    for palete, endereco in zip(paletes, enderecos):
+        if palete.endereco_id != endereco.pk:
+            palete.endereco = endereco
+            movidos.append(palete)
+    if movidos:
+        # Em duas etapas: o banco confere "um palete por endereço" linha a linha
+        # (SQLite e PostgreSQL), então trocar todos num UPDATE só pode colidir no meio.
+        Palete.objects.filter(pk__in=[p.pk for p in movidos]).update(endereco=None)
+        Palete.objects.bulk_update(movidos, ['endereco'])
+    return len(movidos)

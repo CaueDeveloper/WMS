@@ -16,7 +16,7 @@
                 <div class="ficha-item largo"><dt>Produto</dt><dd>{{ palete.descricao }}<small>SKU {{ palete.sku }}</small></dd></div>
                 <div class="ficha-item"><dt>Endereço atual</dt><dd class="mono">{{ palete.endereco.codigo|default:"—" }}</dd></div>
                 <div class="ficha-item"><dt>Lote</dt><dd>{{ palete.lote }}</dd></div>
-                <div class="ficha-item"><dt>Peso</dt><dd>{{ palete.peso_kg|peso }} kg</dd></div>
+                <div class="ficha-item"><dt>Quantidade</dt><dd>{{ palete.peso_kg|quantidade:palete.unidade }}</dd></div>
                 <div class="ficha-item"><dt>Fabricação</dt><dd>{{ palete.data_fabricacao_exibida|date:"d/m/Y" }}</dd></div>
                 <div class="ficha-item"><dt>Vencimento</dt><dd>{{ palete.data_vencimento|date:"d/m/Y"|default:"—" }}</dd></div>
             </dl>
@@ -32,7 +32,7 @@
                     <div class="text-sm font-semibold text-slate-900">{{ etapa.rotulo }}</div>
                     <div class="text-sm text-slate-700">
                         {% firstof etapa.evento.usuario.get_full_name etapa.evento.usuario.username "—" %}
-                        {% if etapa.retirada %}· −{{ etapa.retirada.peso_kg|peso }} kg (saldo {{ etapa.retirada.saldo_kg|peso }} kg){% endif %}
+                        {% if etapa.retirada %}· −{{ etapa.retirada.peso_kg|quantidade:palete.unidade }} (saldo {{ etapa.retirada.saldo_kg|quantidade:palete.unidade }}){% endif %}
                         · <time datetime="{{ etapa.evento.criado_em|date:'c' }}">{{ etapa.evento.criado_em|date:"d/m/Y" }} às {{ etapa.evento.criado_em|time:"H:i:s" }}</time>
                     </div>
                     {% else %}

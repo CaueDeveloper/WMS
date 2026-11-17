@@ -29,7 +29,7 @@ class NotaJaRomaneadaError(Exception):
 # ── Mapa (estoque ARMAZENADO) ────────────────────────────────────────────────
 
 class Filas(dict):
-    """Filas por (corredor, andar) + cache dos paletes alcançáveis por SKU."""
+    """Filas por (corredor, andar) + cache dos paletes alcançáveis por (SKU, unidade)."""
 
     def __init__(self):
         super().__init__()
@@ -37,12 +37,13 @@ class Filas(dict):
 
 
 def _filas_fifo():
-    """Paletes ARMAZENADOS por (corredor, andar), do mais novo para o mais antigo
-    (o último armazenado sai primeiro). Só dá para retirar o palete da frente da
-    fila: se o da frente é de outro SKU, os de trás ficam presos até ele sair."""
+    """Paletes ARMAZENADOS por (corredor, andar), da frente para o fundo da
+    esteira: a guarda 01 é a saída e o primeiro que entrou sai primeiro (FIFO).
+    Só dá para retirar o palete da frente da fila: se o da frente é de outro
+    SKU, os de trás ficam presos até ele sair."""
     paletes = (
         Palete.objects.filter(estado='ARMAZENADO', endereco__isnull=False).select_related('endereco')
-        .annotate(desde=Coalesce('armazenado_em', 'criado_em')).order_by('-desde', '-pk')
+        .annotate(desde=Coalesce('armazenado_em', 'criado_em')).order_by('endereco__posicao', 'pk')
     )
     filas = Filas()
     for palete in paletes:
@@ -50,53 +51,68 @@ def _filas_fifo():
     return filas
 
 
-def _alcancaveis(sku, filas):
-    """Paletes do `sku` que a ordem de saída libera hoje (sequência contínua a partir da
-    frente de cada fila), na ordem global do mais novo para o mais antigo."""
+def _chave(sku, unidade):
+    """Item do mapa = SKU + unidade do palete (kg, un, cx): um palete em caixas
+    não atende uma linha da nota em kg, e vice-versa."""
+    return sku, (unidade or 'kg')
+
+
+def _chave_linha(ln):
+    return _chave(ln['sku'], ln.get('unidade'))
+
+
+def _alcancaveis(chave, filas):
+    """Paletes do item `chave` (sku, unidade) que a ordem de saída libera hoje (sequência
+    contínua a partir da frente de cada fila), na ordem global do mais antigo para o mais
+    novo (FIFO). Um palete do mesmo SKU em outra unidade na frente também bloqueia a fila."""
     cache = getattr(filas, 'livres', None)
-    if cache is not None and sku in cache:
-        return cache[sku]
+    if cache is not None and chave in cache:
+        return cache[chave]
     livres = []
     for fila in filas.values():
         for palete in fila:
-            if palete.sku != sku:
+            if _chave(palete.sku, palete.unidade) != chave:
                 break
             livres.append(palete)
-    livres = sorted(livres, key=lambda p: (p.desde, p.pk), reverse=True)
+    livres = sorted(livres, key=lambda p: (p.desde, p.pk))
     if cache is not None:
-        cache[sku] = livres
+        cache[chave] = livres
     return livres
 
 
 def _estoque_no_mapa(skus):
-    """{sku: kg total ARMAZENADO no mapa}."""
+    """{(sku, unidade): quantidade total ARMAZENADA no mapa}."""
     linhas = (
         Palete.objects.filter(estado='ARMAZENADO', endereco__isnull=False, sku__in=skus)
-        .values('sku').annotate(total=Sum('peso_kg'))
+        .values('sku', 'unidade').annotate(total=Sum('peso_kg'))
     )
-    return {linha['sku']: linha['total'] for linha in linhas}
+    return {_chave(linha['sku'], linha['unidade']): linha['total'] for linha in linhas}
 
 
 # ── Notas fiscais de saída (SAP) x mapa ──────────────────────────────────────
 
 def _faltas_da_nota(nota, filas, estoque):
     """Itens da nota que o mapa não cobre. Linhas do mesmo SKU somam as
-    quantidades (o mesmo palete não vale para duas linhas). Devolve
-    [{sku, descricao, precisa, liberado, motivo}]; vazio = a nota é atendível."""
+    quantidades por unidade (o mesmo palete não vale para duas linhas). Devolve
+    [{sku, unidade, descricao, precisa, liberado, motivo}]; vazio = a nota é atendível."""
     precisa, descricao = {}, {}
     for ln in nota['linhas']:
-        precisa[ln['sku']] = precisa.get(ln['sku'], ZERO) + ln['quantidade']
-        descricao.setdefault(ln['sku'], ln['descricao'])
+        chave = _chave_linha(ln)
+        precisa[chave] = precisa.get(chave, ZERO) + ln['quantidade']
+        descricao.setdefault(chave, ln['descricao'])
     faltas = []
-    for sku, qtd in precisa.items():
-        liberado = sum((p.peso_kg for p in _alcancaveis(sku, filas)), ZERO)
+    for chave, qtd in precisa.items():
+        liberado = sum((p.peso_kg for p in _alcancaveis(chave, filas)), ZERO)
         if liberado >= qtd:
             continue
-        motivo = ('Sem estoque no mapa' if estoque.get(sku, ZERO) <= 0 else
-                  'Estoque insuficiente' if estoque[sku] < qtd else 'Preso por outro produto na frente')
-        faltas.append({'sku': sku, 'descricao': descricao[sku], 'precisa': qtd, 'liberado': liberado,
-                       'motivo': motivo})
+        faltas.append({'sku': chave[0], 'unidade': chave[1], 'descricao': descricao[chave], 'precisa': qtd,
+                       'liberado': liberado, 'motivo': _motivo(estoque.get(chave, ZERO), qtd)})
     return faltas
+
+
+def _motivo(em_estoque, precisa):
+    return ('Sem estoque no mapa' if em_estoque <= 0 else
+            'Estoque insuficiente' if em_estoque < precisa else 'Preso por outro produto na frente')
 
 
 def _notas_romaneadas(docentries):
@@ -108,7 +124,7 @@ def resumo_pendente(resumo):
     """Cabeçalhos de notas (sem linhas) que ainda não têm romaneio."""
     ja_feitas = _notas_romaneadas(n['docentry'] for n in resumo)
     return [{**n, 'data': _data(n['data']),
-             'busca': f"{n['docnum']} {n['carga']}"}
+             'busca': str(n['carga'])}
             for n in resumo if n['docentry'] not in ja_feitas]
 
 
@@ -142,12 +158,12 @@ def notas_com_disponibilidade(notas):
     return resultado
 
 
-def _simular_alocacao(sku, kg, filas, consumido):
-    """Divide `kg` entre os paletes liberados do `sku` (mais novos primeiro).
-    `consumido` {pk: kg} acumula o que outras linhas do mesmo romaneio já
-    reservaram. Devolve ([(palete, kg)], faltante)."""
+def _simular_alocacao(chave, kg, filas, consumido):
+    """Divide a quantidade `kg` entre os paletes liberados do item `chave` (sku, unidade),
+    mais antigos primeiro. `consumido` {pk: qtd} acumula o que outras linhas do mesmo
+    romaneio já reservaram. Devolve ([(palete, qtd)], faltante)."""
     falta, alocacao = kg, []
-    for palete in _alcancaveis(sku, filas):
+    for palete in _alcancaveis(chave, filas):
         if falta <= 0:
             break
         livre = palete.peso_kg - consumido.get(palete.pk, ZERO)
@@ -165,16 +181,10 @@ def _plano_da_nota(nota, filas, estoque):
     paletes que seriam usados (só leitura, nada é gravado)."""
     consumido, plano = {}, []
     for ln in nota['linhas']:
-        alocacao, faltante = _simular_alocacao(ln['sku'], ln['quantidade'], filas, consumido)
+        chave = _chave_linha(ln)
+        alocacao, faltante = _simular_alocacao(chave, ln['quantidade'], filas, consumido)
         usado = ln['quantidade'] - faltante
-        if faltante <= 0:
-            motivo = ''
-        elif estoque.get(ln['sku'], ZERO) <= 0:
-            motivo = 'Sem estoque no mapa'
-        elif estoque[ln['sku']] < ln['quantidade']:
-            motivo = 'Estoque insuficiente'
-        else:
-            motivo = 'Preso por outro produto na frente'
+        motivo = '' if faltante <= 0 else _motivo(estoque.get(chave, ZERO), ln['quantidade'])
         plano.append({
             'necessario': ln['quantidade'], 'usado': usado, 'faltante': faltante,
             'pct': int(min(usado * 100 / ln['quantidade'], 100)) if ln['quantidade'] > 0 else 100,
@@ -188,12 +198,13 @@ def _plano_da_nota(nota, filas, estoque):
     return plano
 
 
-def _alocar_fifo(sku, kg, filas, consumido):
+def _alocar_fifo(chave, kg, filas, consumido):
     """Como `_simular_alocacao`, mas levanta erro se o mapa não cobrir `kg`."""
-    alocacao, falta = _simular_alocacao(sku, kg, filas, consumido)
+    alocacao, falta = _simular_alocacao(chave, kg, filas, consumido)
     if falta > 0:
+        sku, unidade = chave
         raise QuantidadeIndisponivelError(
-            f'O mapa não libera {kg} kg do item {sku} agora (faltam {falta} kg).'
+            f'O mapa não libera {kg} {unidade} do item {sku} agora (faltam {falta} {unidade}).'
         )
     return alocacao
 
@@ -206,7 +217,7 @@ def _data(texto):
 def criar_romaneio_de_notas(criado_por, data, notas):
     """Cria UM romaneio com as notas fiscais de saída do SAP informadas, cada uma
     inteira (tudo ou nada): as linhas de todas as notas somam por SKU na checagem
-    e são atendidas pelos paletes mais novos; se o mapa não cobrir qualquer item,
+    e são atendidas pelos paletes mais antigos (FIFO); se o mapa não cobrir qualquer item,
     nada é gravado. Cada nota no formato de `SapClient.nota_saida`."""
     if not notas:
         raise RomaneioSemItensError('Escolha ao menos uma nota fiscal.')
@@ -219,13 +230,13 @@ def criar_romaneio_de_notas(criado_por, data, notas):
     faltas = _faltas_da_nota({'linhas': linhas}, filas, _estoque_no_mapa({ln['sku'] for ln in linhas}))
     if faltas:
         raise QuantidadeIndisponivelError('O mapa não cobre as notas: ' + '; '.join(
-            f"{f['sku']} precisa de {f['precisa']} kg ({f['motivo'].lower()})" for f in faltas))
+            f"{f['sku']} precisa de {f['precisa']} {f['unidade']} ({f['motivo'].lower()})" for f in faltas))
     consumido, itens = {}, []
     for nota in notas:
         for ln in nota['linhas']:
             extra = {'nota': nota['docentry'], 'nota_linha': ln['linha'], 'preco_unitario': ln['preco']}
             itens += [(palete, peso, extra)
-                      for palete, peso in _alocar_fifo(ln['sku'], ln['quantidade'], filas, consumido)]
+                      for palete, peso in _alocar_fifo(_chave_linha(ln), ln['quantidade'], filas, consumido)]
     try:
         with transaction.atomic():  # savepoint: a corrida na mesma nota vira erro amigável
             return criar_romaneio(
@@ -255,23 +266,39 @@ def criar_romaneio(criado_por, data, itens, notas=(), **cabecalho):
         **cabecalho,
     )
     por_docentry = {n['docentry']: RomaneioNota.objects.create(romaneio=romaneio, **n) for n in notas}
+    # Posições lidas antes de qualquer retirada: o palete esvaziado perde o endereço e os
+    # de trás avançam na esteira (no banco), mas na coleta cada um ainda está onde estava.
+    posicoes = {
+        pk: {'corredor': c, 'andar': a, 'posicao': p}
+        for pk, c, a, p in Palete.objects.filter(pk__in={item[0].pk for item in itens}, endereco__isnull=False)
+        .values_list('pk', 'endereco__corredor', 'endereco__andar', 'endereco__posicao')
+    }
     for palete, peso_kg, *resto in sorted(itens, key=lambda item: item[0].pk):
-        endereco = palete.endereco  # lido antes: o palete esvaziado perde o endereço
         retirada = retirar_peso_do_palete(palete, peso_kg, usuario=criado_por)
-        posicao = ({'corredor': endereco.corredor, 'andar': endereco.andar, 'posicao': endereco.posicao}
-                   if endereco else {})
+        posicao = posicoes.get(palete.pk, {})
         dados = dict(resto[0]) if resto else {}
         if 'nota' in dados:
             dados['nota'] = por_docentry[dados['nota']]
         RomaneioItem.objects.create(
             romaneio=romaneio, retirada=retirada, sku=palete.sku, descricao=palete.descricao,
-            peso_kg=retirada.peso_kg, **posicao, **dados,
+            peso_kg=retirada.peso_kg, unidade=palete.unidade, **posicao, **dados,
         )
     return romaneio
 
 
 class ColetaError(Exception):
     pass
+
+
+def marcar_notas_canceladas(docentries):
+    """Marca como canceladas no SAP as notas de romaneio informadas (as já
+    marcadas ficam com a data original). Devolve quantas foram marcadas agora."""
+    from django.utils import timezone
+
+    if not docentries:
+        return 0
+    return RomaneioNota.objects.filter(docentry__in=docentries, cancelada_em__isnull=True).update(
+        cancelada_em=timezone.now())
 
 
 @transaction.atomic
@@ -306,7 +333,11 @@ def confirmar_coleta(romaneio, usuario):
     romaneio = Romaneio.objects.select_for_update().get(pk=romaneio.pk)
     if romaneio.status != 'ABERTO':
         raise ColetaError('A coleta deste romaneio já foi confirmada.')
-    faltam = romaneio.itens.filter(coletado_em__isnull=True).count()
+    canceladas = romaneio.notas_canceladas
+    if canceladas:
+        numeros = ', '.join(str(n.docnum) for n in canceladas)
+        raise ColetaError(f'Nota(s) {numeros} cancelada(s) no SAP. Coleta bloqueada: fale com o administrador.')
+    faltam =romaneio.itens.filter(coletado_em__isnull=True).count()
     if faltam:
         raise ColetaError(f'Faltam coletar {faltam} item(ns) antes de confirmar.')
     romaneio.status = 'COLETADO'

@@ -8,7 +8,7 @@ from pathlib import Path
 from django.conf import settings
 from django.utils import timezone
 
-from apps.core.templatetags.core_extras import formatar_peso
+from apps.core.templatetags.core_extras import formatar_quantidade
 
 logger = logging.getLogger(__name__)
 
@@ -77,11 +77,13 @@ def campos_etiqueta(palete):
     vencimento = palete.data_vencimento.strftime('%d/%m/%Y') if palete.data_vencimento else '-'
     lote, lote_altura = ajustar_lote(palete.lote)
     desc1, desc2 = quebrar_descricao(palete.descricao)
+    unidade = getattr(palete, 'unidade', None) or 'kg'
     return {
         'barcode': palete.barcode_palete,
         'lote': lote,
         'lote_altura': lote_altura,
-        'peso': formatar_peso(palete.peso_kg),
+        'peso': formatar_quantidade(palete.peso_kg, unidade),
+        'rotulo_qtd': 'PESO (KG)' if unidade == 'kg' else f'QTD ({unidade.upper()})',
         'data': data_fabricacao,
         'vencimento': vencimento,
         'hora': hora_impressao,
@@ -129,6 +131,7 @@ def montar_zpl_etiqueta(palete):
         .replace('[[BARCODE]]', escapar_zpl(c['barcode']))
         .replace('[[LOTE_ALTURA]]', str(c['lote_altura']))
         .replace('[[LOTE]]', escapar_zpl(c['lote']))
+        .replace('[[ROTULO_QTD]]', escapar_zpl(c['rotulo_qtd']))
         .replace('[[PESO]]', escapar_zpl(c['peso']))
         .replace('[[DATA]]', c['data'])
         .replace('[[VENCIMENTO]]', c['vencimento'])

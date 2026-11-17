@@ -87,6 +87,39 @@ class ReceberPaleteTests(TestCase):
         self.assertContains(r, 'dlg-confirmar')
 
 
+    def test_unidade_padrao_kg(self):
+        self._post()
+        self.assertEqual(set(Palete.objects.values_list('unidade', flat=True)), {'kg'})
+
+    def test_caixa_usa_quantidade_digitada(self):
+        self.assertEqual(self._post(unidade='cx', quantidade_palete='120').status_code, 302)
+        self.assertEqual(set(Palete.objects.values_list('unidade', 'peso_kg')), {('cx', Decimal('120'))})
+
+    def test_unidade_exige_quantidade_por_palete(self):
+        self.assertEqual(self._post(unidade='un').status_code, 200)
+        self.assertEqual(self._post(unidade='un', quantidade_palete='0').status_code, 200)
+        self.assertEqual(self._post(unidade='un', quantidade_palete='2.5').status_code, 200)
+        self.assertEqual(Palete.objects.count(), 0)
+
+    def test_unidade_invalida_rejeitada(self):
+        self.assertEqual(self._post(unidade='Manual', quantidade_palete='10').status_code, 200)
+        self.assertEqual(Palete.objects.count(), 0)
+
+    def test_kg_ignora_quantidade_por_palete(self):
+        self._post(unidade='kg', quantidade_palete='7')
+        self.assertEqual(set(Palete.objects.values_list('peso_kg', flat=True)), {Decimal('500')})
+
+    def test_caixa_com_ultimo_palete_diferente(self):
+        self.assertEqual(self._post(unidade='cx', quantidade_palete='120', peso_variavel='on',
+                                    peso_ultimo='35').status_code, 302)
+        self.assertEqual(sorted(Palete.objects.values_list('peso_kg', flat=True)), [Decimal('35'), Decimal('120')])
+        # quantidade fracionada no último palete não vale em caixas
+        Palete.objects.all().delete()
+        self.assertEqual(self._post(unidade='cx', quantidade_palete='120', peso_variavel='on',
+                                    peso_ultimo='3.5', lote='l2').status_code, 200)
+        self.assertEqual(Palete.objects.count(), 0)
+
+
 class ReprovacaoTests(TestCase):
     def setUp(self):
         self.produto = Produto.objects.create(sku='CAFE', descricao='Café 500g')
@@ -236,6 +269,12 @@ class PreviewEtiquetaTests(TestCase):
         self.assertTrue(resp.content.startswith(b'\x89PNG'))
         self.assertEqual(Palete.objects.count(), 0)
 
+    def test_preview_em_caixas(self):
+        self.client.force_login(_usuario('Operador Produção'))
+        resp = self.client.post(self.url, {**self.dados, 'unidade': 'cx', 'quantidade_palete': '80'}, secure=True)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(Palete.objects.count(), 0)
+
     def test_dados_invalidos_devolve_400(self):
         self.client.force_login(_usuario('Operador Produção'))
         resp = self.client.post(self.url, {**self.dados, 'lote': '@@'}, secure=True)
@@ -362,3 +401,15 @@ class AdminPaleteEdicaoTests(TestCase):
         r = self.client.get(self.url, secure=True)
         self.assertEqual(r.status_code, 200)
         self.assertNotContains(r, 'name="_save"')
+
+
+class EtiquetaUnidadeTests(TestCase):
+    def test_rotulo_e_quantidade_na_etiqueta(self):
+        from .zpl import campos_etiqueta, montar_zpl_etiqueta
+        kg = Palete(sku='X', descricao='x', lote='L1', peso_kg=Decimal('500'))
+        cx = Palete(sku='X', descricao='x', lote='L1', peso_kg=Decimal('120'), unidade='cx')
+        self.assertEqual((campos_etiqueta(kg)['rotulo_qtd'], campos_etiqueta(kg)['peso']), ('PESO (KG)', '500,00'))
+        self.assertEqual((campos_etiqueta(cx)['rotulo_qtd'], campos_etiqueta(cx)['peso']), ('QTD (CX)', '120'))
+        zpl = montar_zpl_etiqueta(cx)
+        self.assertIn('^FDQTD (CX)^FS', zpl)
+        self.assertNotIn('[[ROTULO_QTD]]', zpl)

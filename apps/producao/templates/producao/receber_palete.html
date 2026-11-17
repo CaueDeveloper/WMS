@@ -21,7 +21,7 @@
                 <th>Lote</th>
                 <th>SKU</th>
                 <th>Descrição</th>
-                <th class="num">Peso (kg)</th>
+                <th class="num">Quantidade</th>
                 <th>Fabricação</th>
                 <th>Vencimento</th>
                 <th>Criado em</th>
@@ -34,7 +34,7 @@
                 <td>{{ palete.lote }}</td>
                 <td>{{ palete.sku }}</td>
                 <td>{{ palete.descricao }}</td>
-                <td class="num">{{ palete.peso_kg|peso }}</td>
+                <td class="num">{{ palete.peso_kg|quantidade:palete.unidade }}</td>
                 <td>{{ palete.data_fabricacao|date:"d/m/Y"|default:"—" }}</td>
                 <td>{{ palete.data_vencimento|date:"d/m/Y"|default:"—" }}</td>
                 <td>{{ palete.criado_em|date:"d/m/Y H:i" }}</td>
@@ -68,7 +68,7 @@
                 {% for erro in campo.errors %}<p class="alert-error texto-coletor mt-2 mb-0">{{ erro }}</p>{% endfor %}
             </div>
         {% endfor %}
-        <p id="linha-peso-padrao" class="m-0 text-xl font-bold">Peso do palete: <span id="peso-padrao">{{ peso_fixo_kg|peso }} kg</span></p>
+        <p id="linha-peso-padrao" class="m-0 text-xl font-bold"><span id="rotulo-peso-padrao">Peso do palete:</span> <span id="peso-padrao">{{ peso_fixo_kg|peso }} kg</span></p>
     </div>
     <footer class="form-card-footer">
         <button type="button" class="btn btn-secondary hidden lg:inline-flex" data-fechar>Cancelar</button>
@@ -91,7 +91,8 @@
                 <div><dt class="text-slate-600">Quantidade de paletes</dt><dd class="m-0 font-semibold" id="conf-quantidade"></dd></div>
                 <div><dt class="text-slate-600">Data de fabricação</dt><dd class="m-0 font-semibold" id="conf-data"></dd></div>
                 <div><dt class="text-slate-600">Data de vencimento</dt><dd class="m-0 font-semibold" id="conf-vencimento"></dd></div>
-                <div><dt class="text-slate-600">Peso do palete</dt><dd class="m-0 font-semibold" id="conf-peso"></dd></div>
+                <div><dt class="text-slate-600">Unidade de medida</dt><dd class="m-0 font-semibold" id="conf-unidade"></dd></div>
+                <div><dt class="text-slate-600" id="conf-peso-rotulo">Peso do palete</dt><dd class="m-0 font-semibold" id="conf-peso"></dd></div>
             </dl>
             <figure class="m-0 mt-4">
                 <figcaption class="mb-1 text-sm text-slate-600">Pré-visualização da etiqueta</figcaption>
@@ -121,7 +122,30 @@
     var produtosPesoVariavel = JSON.parse(document.getElementById('produtos-peso-variavel').textContent).map(String);
     var pesoUltimoEnviado = JSON.parse(document.getElementById('peso-ultimo-enviado').textContent);
 
+    var selectUnidade = document.getElementById('id_unidade');
+    var campoQtdPalete = document.getElementById('id_quantidade_palete');
+    var linhaQtdPalete = document.getElementById('linha-quantidade_palete');
+    var linhaPesoPadrao = document.getElementById('linha-peso-padrao');
+    function unidade() { return selectUnidade.value; }
+    function contavel() { return unidade() !== 'kg'; }  // un/cx: quantidades inteiras digitadas
+
     function campoPesoUltimo() { return linhaPesos.querySelector('input[name="peso_ultimo"]'); }
+    function rotuloUltimo() {
+        return contavel() ? 'Quantidade do último palete (' + unidade() + ')' : 'Peso do último palete (kg)';
+    }
+
+    // kg: peso fixo; un/cx: o operador digita a quantidade por palete
+    function atualizarUnidade() {
+        linhaQtdPalete.hidden = !contavel();
+        campoQtdPalete.required = contavel();
+        linhaPesoPadrao.hidden = contavel();
+        var existente = campoPesoUltimo();
+        if (existente) {
+            existente.step = contavel() ? '1' : '0.001';
+            existente.min = contavel() ? '1' : '0.001';
+            existente.parentNode.firstChild.textContent = rotuloUltimo();
+        }
+    }
 
     // Peso variável: só o último palete tem peso próprio; os demais usam o peso fixo
     function atualizarCampoPeso() {
@@ -130,12 +154,12 @@
         if (existente) return;
         var rotulo = document.createElement('label');
         rotulo.className = 'texto-coletor';
-        rotulo.textContent = 'Peso do último palete (kg)';
+        rotulo.textContent = rotuloUltimo();
         var campo = document.createElement('input');
         campo.type = 'number';
         campo.name = 'peso_ultimo';
-        campo.step = '0.001';
-        campo.min = '0.001';
+        campo.step = contavel() ? '1' : '0.001';
+        campo.min = contavel() ? '1' : '0.001';
         campo.required = true;
         campo.autocomplete = 'off';
         campo.className = 'input-field input-field-lg';
@@ -145,6 +169,8 @@
     }
 
     checkPesoVariavel.addEventListener('change', atualizarCampoPeso);
+    selectUnidade.addEventListener('change', atualizarUnidade);
+    atualizarUnidade();
     // Produto de peso variável já nasce com o peso manual marcado
     var estoqueSap = JSON.parse(document.getElementById('estoque-sap-dados').textContent);
     var skusProdutos = JSON.parse(document.getElementById('skus-produtos').textContent);
@@ -179,11 +205,18 @@
         document.getElementById('conf-quantidade').textContent = document.getElementById('id_quantidade').value;
         document.getElementById('conf-data').textContent = formatarData(document.getElementById('id_data_fabricacao').value);
         document.getElementById('conf-vencimento').textContent = formatarData(document.getElementById('id_data_vencimento').value);
-        var pesoPadrao = document.getElementById('peso-padrao').textContent;
+        var un = unidade();
+        var pesoPadrao = contavel()
+            ? Number(campoQtdPalete.value).toLocaleString('pt-BR') + ' ' + un
+            : document.getElementById('peso-padrao').textContent;
         var quantidadeConf = parseInt(campoQuantidade.value, 10) || 1;
+        var ultimo = checkPesoVariavel.checked ? Number(campoPesoUltimo().value) : null;
+        document.getElementById('conf-unidade').textContent = selectUnidade.options[selectUnidade.selectedIndex].text;
+        document.getElementById('conf-peso-rotulo').textContent = contavel() ? 'Quantidade por palete' : 'Peso do palete';
         document.getElementById('conf-peso').textContent = checkPesoVariavel.checked
             ? (quantidadeConf > 1 ? (quantidadeConf - 1) + ' × ' + pesoPadrao + ' · último: ' : '')
-                + Number(campoPesoUltimo().value).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 3}) + ' kg'
+                + (contavel() ? ultimo.toLocaleString('pt-BR')
+                    : ultimo.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 3})) + ' ' + un
             : pesoPadrao;
         carregarPreview();
         dlgConfirmar.showModal();

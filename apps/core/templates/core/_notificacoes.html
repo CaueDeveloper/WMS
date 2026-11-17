@@ -1,0 +1,117 @@
+{% comment %}
+Sino de notificações do topbar (incluído em core/_shell.html). O contador vem do context
+processor `menu`; a lista é carregada via fetch ao abrir o painel e o contador é
+atualizado a cada 30s (pausa com a aba oculta). Itens são montados com textContent.
+{% endcomment %}
+<div class="relative" id="notif" data-url-json="{% url 'notificacoes_json' %}" data-url-ler-todas="{% url 'notificacoes_ler_todas' %}"
+     data-url-ler="{% url 'notificacao_ler' 0 %}" data-csrf="{{ csrf_token }}">
+    <button type="button" id="notif-botao" class="relative flex h-11 w-11 items-center justify-center rounded-full text-slate-700 hover:bg-slate-100"
+            aria-haspopup="true" aria-expanded="false" aria-controls="notif-painel" aria-label="Notificações">
+        {% include 'core/_icone.html' with nome='bell' classe='h-6 w-6' %}
+        <span id="notif-contador" class="absolute right-1 top-1 min-w-5 rounded-full bg-red-600 px-1.5 text-center text-[11px] font-semibold leading-5 text-white{% if not notificacoes_nao_lidas %} hidden{% endif %}">{% if notificacoes_nao_lidas > 99 %}99+{% else %}{{ notificacoes_nao_lidas }}{% endif %}</span>
+    </button>
+
+    <div id="notif-painel" role="region" aria-label="Notificações"
+         class="hidden fixed inset-x-4 top-16 z-50 max-h-[70vh] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-pop sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96">
+        <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+            <span class="text-sm font-semibold text-slate-900">Notificações</span>
+            <button type="button" id="notif-ler-todas" class="text-xs font-medium text-primary-700 hover:underline">Marcar todas como lidas</button>
+        </div>
+        <ul id="notif-lista" class="m-0 max-h-[55vh] list-none divide-y divide-slate-100 overflow-y-auto p-0"></ul>
+        <p id="notif-vazio" class="hidden m-0 px-4 py-6 text-center text-sm text-slate-500">Nenhuma notificação.</p>
+        <a href="{% url 'notificacoes' %}" class="block border-t border-slate-200 px-4 py-2.5 text-center text-sm font-medium text-primary-700 no-underline hover:bg-slate-50">Ver todas</a>
+    </div>
+</div>
+<script>
+(function () {
+    var raiz = document.getElementById('notif');
+    if (!raiz) return;
+    var INTERVALO_MS = 30000;
+    var botao = document.getElementById('notif-botao');
+    var painel = document.getElementById('notif-painel');
+    var contador = document.getElementById('notif-contador');
+    var lista = document.getElementById('notif-lista');
+    var vazio = document.getElementById('notif-vazio');
+    var csrf = raiz.dataset.csrf;
+    var carregando = false;
+
+    function post(url) {
+        return fetch(url, { method: 'POST', headers: { 'X-CSRFToken': csrf, 'X-Requested-With': 'XMLHttpRequest' } });
+    }
+
+    function urlLer(id) { return raiz.dataset.urlLer.replace('/0/', '/' + id + '/'); }
+
+    function mostrarContador(n) {
+        contador.textContent = n > 99 ? '99+' : String(n);
+        contador.classList.toggle('hidden', !n);
+    }
+
+    function item(n) {
+        var li = document.createElement('li');
+        var a = document.createElement('a');
+        a.href = n.link || '#';
+        a.className = 'block px-4 py-3 no-underline hover:bg-slate-50' + (n.lida ? '' : ' bg-primary-50');
+        var titulo = document.createElement('div');
+        titulo.className = 'flex items-start gap-2 text-sm text-slate-900' + (n.lida ? '' : ' font-semibold');
+        if (!n.lida) {
+            var ponto = document.createElement('span');
+            ponto.className = 'mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary-600';
+            titulo.appendChild(ponto);
+        }
+        titulo.appendChild(document.createTextNode(n.titulo));
+        var msg = document.createElement('div');
+        msg.className = 'mt-0.5 text-xs text-slate-600';
+        msg.textContent = n.mensagem;
+        var data = document.createElement('div');
+        data.className = 'mt-1 text-[11px] text-slate-400';
+        data.textContent = n.criada_em;
+        a.append(titulo, msg, data);
+        a.addEventListener('click', function (ev) {
+            if (n.lida) return;
+            ev.preventDefault();
+            post(urlLer(n.id)).finally(function () {
+                if (n.link) window.location.href = n.link; else atualizar();
+            });
+        });
+        li.appendChild(a);
+        return li;
+    }
+
+    function atualizar() {
+        if (carregando) return;
+        carregando = true;
+        fetch(raiz.dataset.urlJson, { cache: 'no-store', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(function (dados) {
+                mostrarContador(dados.nao_lidas);
+                lista.replaceChildren.apply(lista, dados.itens.map(item));
+                vazio.classList.toggle('hidden', dados.itens.length > 0);
+            })
+            .catch(function () { /* tenta de novo no próximo ciclo */ })
+            .then(function () { carregando = false; });
+    }
+
+    function abrir(sim) {
+        painel.classList.toggle('hidden', !sim);
+        botao.setAttribute('aria-expanded', sim ? 'true' : 'false');
+        if (sim) atualizar();
+    }
+
+    botao.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        abrir(painel.classList.contains('hidden'));
+    });
+    document.addEventListener('click', function (ev) {
+        if (!painel.classList.contains('hidden') && !raiz.contains(ev.target)) abrir(false);
+    });
+    document.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape' && !painel.classList.contains('hidden')) { abrir(false); botao.focus(); }
+    });
+    document.getElementById('notif-ler-todas').addEventListener('click', function () {
+        post(raiz.dataset.urlLerTodas).finally(atualizar);
+    });
+
+    setInterval(function () { if (!document.hidden) atualizar(); }, INTERVALO_MS);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) atualizar(); });
+})();
+</script>
